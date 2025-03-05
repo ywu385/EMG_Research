@@ -66,25 +66,6 @@ class DCRemover(SignalProcessor):
 #         # Remove DC offset from each channel
 #         return data - np.mean(data, axis=1, keepdims=True)
 
-class FeatureExtractor(SignalProcessor):
-    def process(self, data: np.ndarray) -> dict:
-        features = {}
-        for channel in data:
-            # Root Mean Square (RMS)
-            features['rms'] = np.sqrt(np.mean(channel**2))
-            # Variance
-            features['variance'] = np.var(channel)
-            # Mean Absolute Value (MAV)
-            features['mav'] = np.mean(np.abs(channel))
-            # Slope Sign Change (SSC)
-            diff = np.diff(channel)
-            features['ssc'] = np.sum((diff[:-1] * diff[1:]) < 0)
-            # Zero Crossing Rate (ZCR)
-            features['zcr'] = np.sum(np.diff(np.signbit(channel).astype(int)) != 0)
-            # Waveform Length (WL)
-            features['wl'] = np.sum(np.abs(np.diff(channel)))
-        
-        return features
 
 class NotchFilter(SignalProcessor):
     def __init__(self, notch_freqs: List[float], sampling_rate: int, quality_factor: float = 30.0):
@@ -280,7 +261,7 @@ class ModelProcessor(SignalProcessor):
         else:
             return np.array(predictions)
 
-
+######################################################## Normalizing features  ######################################################################
 class Normalize_EMG(SignalProcessor):
     def __init__(self, method='zscore', mode='window', buffer_size=None):
         """
