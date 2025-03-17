@@ -1,12 +1,13 @@
-from src.stream_processor_bit import *
-from src.processors import *
-from bitalino import *
+from stream_processor_bit import *
+from processors import *
+from revolution_api.bitalino import *
 import numpy as np
 import pygame
 import multiprocessing
 import configparser
 import argparse
 import ast
+
 
 def parse_arguments():
     """Parse command line arguments to get the INI file path."""
@@ -79,7 +80,7 @@ def main():
         
         # Set default model settings
         config['model'] = {
-            'model_path': '/Users/adampochobut/Desktop/Res/revolution-python-api/rfc.pkl',
+            'model_path': '/Users/adampochobut/Desktop/Models/rfc.pkl',
             'window_size': '250',
             'overlap': '0.5',
             'sampling_rate': '1000'

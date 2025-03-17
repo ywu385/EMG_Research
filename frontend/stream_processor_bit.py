@@ -3,7 +3,7 @@ import time
 from typing import Generator, List, Tuple
 from scipy import signal
 import os
-from signal_processing_src.processors import *
+from processors import *
 
 ######################################################## Streamer object ######################################################################
 import csv

@@ -59,14 +59,6 @@ class DCRemover(SignalProcessor):
         # Remove DC offset from each channel
         return data - np.mean(data, axis=1, keepdims=True)
 
-# Example of another simple processor
-
-# class DCRemover(SignalProcessor):
-#     def process(self, data: np.ndarray) -> np.ndarray:
-#         # Remove DC offset from each channel
-#         return data - np.mean(data, axis=1, keepdims=True)
-
-
 class NotchFilter(SignalProcessor):
     def __init__(self, notch_freqs: List[float], sampling_rate: int, quality_factor: float = 30.0):
         """
@@ -98,79 +90,6 @@ class NotchFilter(SignalProcessor):
 
    
 
-
-from statistics import mode
-
-class ModelProcessor(SignalProcessor):
-    def __init__(self, model, window_size=250, overlap=0.5, sampling_rate=1000, aggregate=True):
-        """
-        Args:
-            model: Loaded ML model for prediction
-            window_size: Number of samples per window
-            overlap: Overlap ratio between windows (0 to 1)
-            sampling_rate: Sampling rate in Hz
-        """
-        self.model = model
-        self.window_size = window_size
-        self.stride = int(window_size * (1 - overlap))
-        self.sampling_rate = sampling_rate
-        self.aggregate = aggregate
-        
-    def extract_features(self, signal):
-        """
-        Extract time-domain features from a signal array
-        Args:
-            signal (array-like): Input signal array
-        Returns:
-            dict: Dictionary containing computed features
-        """
-        # Convert to numpy array if not already
-        signal = np.array(signal)
-        # Root Mean Square (RMS)
-        rms = np.sqrt(np.mean(signal**2))
-        # Variance
-        variance = np.var(signal)
-        # Mean Absolute Value (MAV)
-        mav = np.mean(np.abs(signal))
-        # Slope Sign Change (SSC)
-        diff = np.diff(signal)
-        ssc = np.sum((diff[:-1] * diff[1:]) < 0)
-        # Zero Crossing Rate (ZCR)
-        zcr = np.sum(np.diff(np.signbit(signal).astype(int)) != 0)
-        # Waveform Length (WL)
-        wl = np.sum(np.abs(np.diff(signal)))
-        return {
-            'rms': rms,
-            'variance': variance,
-            'mav': mav,
-            'ssc': ssc,
-            'zcr': zcr,
-            'wl': wl
-        }
-        
-    def process(self, data: np.ndarray) -> np.ndarray:
-        """Process EMG data with overlapping windows and return predictions"""
-        n_channels, n_samples = data.shape
-        predictions = []
-        
-        # Process overlapping windows
-        for i in range(0, n_samples - self.window_size + 1, self.stride):
-            window = data[:, i:i+self.window_size]
-            features = []
-            
-            # Extract features from each channel
-            for channel in window:
-                features.extend(list(self.extract_features(channel).values()))
-                
-            # Make prediction
-            pred = self.model.predict(np.array(features).reshape(1, -1))
-            predictions.append(pred[0])
-            print(f'Prediction of window {i}: {pred}')
-        
-        if self.aggregate:
-            return mode(np.array(predictions))
-        else:
-            return np.array(predictions)
 
 ######################################################## Normalizing features  ######################################################################
 class Normalize_EMG(SignalProcessor):
