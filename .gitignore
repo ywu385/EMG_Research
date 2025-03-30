@@ -175,3 +175,14 @@ cython_debug/
 
 # scratch paper files
 visualizer.py
+
+# video files
+/videos
+video_viz*
+
+.DS_Store
+
+/prod*
+
+/signal_processing_src*
+/frontend*
