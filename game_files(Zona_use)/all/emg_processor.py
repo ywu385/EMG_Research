@@ -26,7 +26,7 @@ except ImportError:
 BITALINO_AVAILABLE = importlib.util.find_spec('bitalino') is not None
 if BITALINO_AVAILABLE:
     try:
-        from bitalino import *
+        from revolution_api.bitalino import *
         print("Bitalino module is available")
     except ImportError:
         BITALINO_AVAILABLE = False
