@@ -90,8 +90,8 @@ def process_emg_data(macAddress, battery_threshold, output_queue):
         print("Starting EMG processing loop...")
         for chunk in streamer.stream_processed():
             try:
-                if counter % 50 == 0:
-                    print(f'Data Stream sample: {chunk[:, :5]}')  # Print only first 5 samples
+                # if counter % 50 == 0:
+                print(f'Data Stream sample: {chunk[:, :5]}')  # Print only first 5 samples
                 # Process for prediction and intensity
                 windows = buffer.add_chunk(chunk)
                 intensity_value = None
@@ -100,7 +100,6 @@ def process_emg_data(macAddress, battery_threshold, output_queue):
                     new_prediction = model_processor.process(w)
                     if new_prediction is not None:
                         prediction = new_prediction  # Update prediction only if valid
-
 
                     # Process intensity
                     i_metrics = intensity_processor.process(w)
