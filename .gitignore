@@ -175,3 +175,17 @@ cython_debug/
 
 # scratch paper files
 visualizer.py
+
+# exclude video path
+/videos/
+
+# exclude video rendering files
+video*
+*viz*
+matplot.py
+frontend/
+
+#exclude DS Store
+.DS_Store
+
+/prod/data/

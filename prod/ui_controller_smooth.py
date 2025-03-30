@@ -8,14 +8,31 @@ import multiprocessing
 from post_processing import *
 
 #%%
+### Bitalino Constants ###
+# running_time = 60
+# batteryThreshold = 30
+# acqChannels = [0, 1, 2, 3, 4, 5]
+# samplingRate = 1000
+# nSamples = 10
+
+# macAddress = "/dev/tty.BITalino-3C-C2"
+
+# ### Setup of the Device and Streamer ###
+# device = BITalino(macAddress)
+
+# device.battery(batteryThreshold)
+
+# streamer = BitaStreamer(device) # BitaStreamer 
+
 ######################################################## TXT STREAMER ######################################################################
 import glob 
-data_path = glob.glob('../data/newest data/*')
+data_path = glob.glob('./data/combined/*')
 
-streamer = TXTStreamer(data_path[4])
+print(f'Data loaded is {data_path[1]}')
+streamer = TXTStreamer(data_path[1])
 
 ######################################################## END TXT STREAMER ######################################################################
-
+#%%
 pipeline = EMGPipeline()
 pipeline.add_processor(ZeroChannelRemover())
 # pipeline.add_processor(FiveChannels())   # Only use this if model is trained on 5 channels
@@ -32,6 +49,8 @@ streamer.add_pipeline(pipeline)
 model_path = 'models/*'
 models = glob.glob(model_path)
 
+
+
 import pickle
 with open(models[1], 'rb') as file:
     model_path = pickle.load(file)
@@ -40,17 +59,20 @@ model_processor = ModelProcessor(
     model=model_path,
     window_size=250,  # 250ms window
     overlap=0.5,      # 50% overlap
-    sampling_rate=1000
+    sampling_rate=1000,
+    n_predictions= 1,
 )
 
 #%%
+import math
 # Initialize buffer and intensity processor
 buffer = SignalBuffer(window_size=250, overlap=0.5)
 intensity_processor = IntensityProcessor(scaling_factor=1.5)
 
 # Function to calculate intensity value from normalized RMS
-def intensity_calc(norm_rms, min_speed=0.1, max_speed=1.0):
+def intensity_calc(norm_rms, min_speed=0, max_speed=10):
     return min_speed + (norm_rms * (max_speed - min_speed))
+
 
 ### Defines a process that outputs the prediction and puts it in the queue ###
 def output_predictions(model_processor, chunk_queue):
@@ -58,17 +80,17 @@ def output_predictions(model_processor, chunk_queue):
     while True:
         for chunk in streamer.stream_processed():
             # Process for prediction
-            prediction = model_processor.process(chunk)
+            # prediction = model_processor.process(chunk)
             
             # Process for intensity
             windows = buffer.add_chunk(chunk)
             intensity_value = None
             
             for w in windows:
-                intensity_metrics = intensity_processor.process(w)
-                norm_rms = np.array(intensity_metrics['rms_values']).max()/intensity_processor.max_rms
+                prediction = model_processor.process(w) #processes and outputs predictions
+                i_metrics = intensity_processor.process(w) # outputs dict with other values
+                norm_rms = np.array(i_metrics['rms_values']).max()/i_metrics['max_rms_ever']
                 intensity_value = intensity_calc(norm_rms)
-                print(f"Intensity value: {intensity_value}")
             
             # Only when model buffer has enough data
             if prediction is not None:
