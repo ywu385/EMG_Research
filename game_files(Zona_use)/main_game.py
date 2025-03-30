@@ -1,7 +1,11 @@
 import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import atexit
 from game_comp.game_manager import GameManager
-import emg_processor
+import emg_comp.emg_processor as emg_processor
+
+
 
 def main():
     # Initialize the EMG processor first (at global level, before pygame)

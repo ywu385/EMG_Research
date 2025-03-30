@@ -6,9 +6,9 @@ import sys
 import atexit
 
 # Import our game modules
-from target_game import TargetGame
-from GridSpiralGame import GridSpiralChallenge
-import emg_processor
+from .target_game import TargetGame
+from .GridSpiralGame import GridSpiralChallenge
+import emg_comp.emg_processor as emg_processor
 
 class GameManager:
     """Manages the different game modes and transitions between them"""
