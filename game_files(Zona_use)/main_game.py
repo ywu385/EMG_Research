@@ -25,7 +25,8 @@ def main():
             atexit.register(emg_processor.shutdown_emg_processing)
     
     # Create and run the game manager
-    game_manager = GameManager(1280, 720, use_emg=use_emg)
+    # game_manager = GameManager(1280, 720, use_emg=use_emg)
+    game_manager = GameManager(800, 600, use_emg=use_emg)
     game_manager.run()
 
 if __name__ == "__main__":
