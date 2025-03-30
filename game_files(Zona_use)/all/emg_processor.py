@@ -58,8 +58,8 @@ def process_emg_data(macAddress, battery_threshold, output_queue):
         pipeline.add_processor(NotchFilter([60], sampling_rate=1000))
         pipeline.add_processor(DCRemover())
         
-        bandpass = ButterFilter(cutoff=[20, 450], sampling_rate=1000, filter_type='bandpass', order=4)
-        pipeline.add_processor(bandpass)
+        # bandpass = ButterFilter(cutoff=[20, 450], sampling_rate=1000, filter_type='bandpass', order=4)
+        # pipeline.add_processor(bandpass)
         pipeline.add_processor(AdaptiveMaxNormalizer())
         streamer.add_pipeline(pipeline)
         
