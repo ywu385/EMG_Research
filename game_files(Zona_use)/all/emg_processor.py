@@ -4,7 +4,7 @@ import multiprocessing
 import glob
 import pickle
 import time
-import importlib.util
+# import importlib.util
 import sys
 # import os
 # sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -23,7 +23,8 @@ except ImportError:
     EMG_MODULES_AVAILABLE = False
 
 # Check if bitalino is available
-BITALINO_AVAILABLE = importlib.util.find_spec('bitalino') is not None
+# BITALINO_AVAILABLE = importlib.util.find_spec('bitalino') is not None
+BITALINO_AVAILABLE = True  # forcing bitalino to try and import from folder directory
 if BITALINO_AVAILABLE:
     try:
         from revolution_api.bitalino import *
