@@ -90,26 +90,39 @@ def process_emg_data(macAddress, battery_threshold, output_queue):
         print("Starting EMG processing loop...")
         for chunk in streamer.stream_processed():
             try:
+                if counter % 50 == 0:
+                    print(f'Data Stream sample: {chunk[:, :5]}')  # Print only first 5 samples
                 # Process for prediction and intensity
                 windows = buffer.add_chunk(chunk)
                 intensity_value = None
                 
                 for w in windows:
-                    prediction = model_processor.process(w)
+                    new_prediction = model_processor.process(w)
+                    if new_prediction is not None:
+                        prediction = new_prediction  # Update prediction only if valid
+
+
+                    # Process intensity
                     i_metrics = intensity_processor.process(w)
                     
                     if i_metrics['rms_values'] is not None and len(i_metrics['rms_values']) > 0:
                         norm_rms = np.array(i_metrics['rms_values']).max() / i_metrics['max_rms_ever']
                         intensity_value = intensity_calc(norm_rms)
                 
-                # Only when model buffer has enough data
+                # Only send data when we have a valid prediction
                 if prediction is not None:
                     output_queue.put((prediction, intensity_value))
                     counter += 1
                     if counter % 100 == 0:
                         print(f"Processed {counter} EMG chunks")
+                        if hasattr(model_processor, 'class_labels') and prediction in model_processor.class_labels:
+                            print(f"Current prediction: {model_processor.class_labels[prediction]}")
+                        else:
+                            print(f"Current prediction: {prediction}")
             except Exception as e:
                 print(f"Error processing chunk: {e}")
+                import traceback
+                traceback.print_exc()
                 # Continue with next chunk rather than breaking the loop
     
     except Exception as e:
