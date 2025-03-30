@@ -39,36 +39,78 @@ emg_process = None
 latest_prediction = "rest"
 latest_intensity = 0.1
 
+# def process_emg_data(streamer, model_processor, buffer, intensity_processor, output_queue):
+#     """Process EMG data continuously and put results in the queue"""
+#     print("EMG processing thread started")
+#     counter = 0
+    
+#     try:
+#         while True:
+#             for chunk in streamer.stream_processed():
+#                 # Process for prediction and intensity
+#                 windows = buffer.add_chunk(chunk)
+#                 intensity_value = None
+                
+#                 for w in windows:
+#                     prediction = model_processor.process(w)
+#                     i_metrics = intensity_processor.process(w)
+                    
+#                     if i_metrics['rms_values'] is not None and len(i_metrics['rms_values']) > 0:
+#                         norm_rms = np.array(i_metrics['rms_values']).max() / i_metrics['max_rms_ever']
+#                         intensity_value = intensity_calc(norm_rms)
+                
+#                 # Only when model buffer has enough data
+#                 if prediction is not None:
+#                     output_queue.put((prediction, intensity_value))
+#                     counter += 1
+#                     if counter % 100 == 0:
+#                         print(f"Processed {counter} EMG chunks")
+#     except Exception as e:
+#         print(f"Error in EMG processing thread: {e}")
+#         import traceback
+#         traceback.print_exc()
+ 
 def process_emg_data(streamer, model_processor, buffer, intensity_processor, output_queue):
     """Process EMG data continuously and put results in the queue"""
     print("EMG processing thread started")
     counter = 0
-    
     try:
+        print("Entering main processing loop")
         while True:
-            for chunk in streamer.stream_processed():
-                # Process for prediction and intensity
-                windows = buffer.add_chunk(chunk)
-                intensity_value = None
-                
-                for w in windows:
-                    prediction = model_processor.process(w)
-                    i_metrics = intensity_processor.process(w)
+            try:
+                print("Waiting for next data chunk...")
+                for chunk in streamer.stream_processed():
+                    print(f"Processing chunk {counter+1}")
+                    # Process for prediction and intensity
+                    windows = buffer.add_chunk(chunk)
+                    intensity_value = None
+
+                    for w in windows:
+                        prediction = model_processor.process(w)
+                        i_metrics = intensity_processor.process(w)
                     
-                    if i_metrics['rms_values'] is not None and len(i_metrics['rms_values']) > 0:
-                        norm_rms = np.array(i_metrics['rms_values']).max() / i_metrics['max_rms_ever']
-                        intensity_value = intensity_calc(norm_rms)
+                        if i_metrics['rms_values'] is not None and len(i_metrics['rms_values']) > 0:
+                            norm_rms = np.array(i_metrics['rms_values']).max() / i_metrics['max_rms_ever']
+                            intensity_value = intensity_calc(norm_rms)
                 
-                # Only when model buffer has enough data
-                if prediction is not None:
-                    output_queue.put((prediction, intensity_value))
-                    counter += 1
-                    if counter % 100 == 0:
-                        print(f"Processed {counter} EMG chunks")
+                    # Only when model buffer has enough data
+                    if prediction is not None:
+                        output_queue.put((prediction, intensity_value))
+                        counter += 1
+                        if counter % 100 == 0:
+                            print(f"Processed {counter} EMG chunks")
+
+            except Exception as inner_e:
+                print(f"Error in streaming loop: {inner_e}")
+                import traceback
+                traceback.print_exc()
+                # Consider adding a small delay before retrying
+                time.sleep(1)
     except Exception as e:
-        print(f"Error in EMG processing thread: {e}")
+        print(f"Fatal error in EMG processing thread: {e}")
         import traceback
         traceback.print_exc()
+
 
 def intensity_calc(norm_rms, min_speed=0, max_speed=10):
     """Calculate intensity value from normalized RMS"""
