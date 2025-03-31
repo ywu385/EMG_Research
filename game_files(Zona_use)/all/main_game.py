@@ -5,6 +5,7 @@ import multiprocessing
 import numpy as np
 import time
 import traceback
+import pygame
 from game_manager import GameManager
 
 # Import necessary modules for EMG processing
@@ -22,42 +23,27 @@ except ImportError:
     print("EMG modules not available. Running in keyboard-only mode.")
     EMG_MODULES_AVAILABLE = False
 
-# Global variables for EMG processing
+# Queue for EMG communication
 emg_queue = multiprocessing.Queue()
+
+# EMG state variables
 emg_process = None
 latest_prediction = "rest"
 latest_intensity = 0.1
-use_emg = True
 
-# Function to create a fresh BITalino connection
-def create_bitalino_connection():
-    batteryThreshold = 30
-    macAddress = "/dev/tty.BITalino-3C-C2"
-
-    print(f"Connecting to BITalino device at {macAddress}...")
-    device = BITalino(macAddress)
-    battery = device.battery(batteryThreshold)
-    print(f"Connected to BITalino device. Battery: {battery}%")
-    return device
-
-# Function to calculate intensity value from normalized RMS
-def intensity_calc(norm_rms, min_speed=0, max_speed=10):
-    """Calculate intensity value from normalized RMS"""
-    return min_speed + (norm_rms * (max_speed - min_speed))
-
-# EMG prediction function to run in a separate process
-def output_predictions(model_processor, chunk_queue):
-    """Process EMG data continuously and put results in the queue"""
+def process_emg_data(mac_address, model_path, queue):
+    """Process EMG data in a separate process"""
     print("EMG processing thread started")
-    counter = 0
     
     try:
-        # Create a new BITalino connection inside the process
-        device = create_bitalino_connection()
+        # Setup device
+        device = BITalino(mac_address)
+        device.battery(30)
+        print("BITalino connected in processing thread")
         
-        # Create a fresh streamer
+        # Setup streamer
         streamer = BitaStreamer(device)
-        print("Created fresh BITalino streamer in processing thread")
+        print("Created BITalino streamer in processing thread")
         
         # Setup pipeline
         pipeline = EMGPipeline()
@@ -68,43 +54,47 @@ def output_predictions(model_processor, chunk_queue):
         streamer.add_pipeline(pipeline)
         print("Pipeline added to streamer in processing thread")
         
-        # Setup buffer
+        # Load model in this process
+        with open(model_path, 'rb') as file:
+            model, label_encoder = pickle.load(file)
+        print(f"Model loaded from {model_path}")
+        
+        # Setup model processor
+        model_processor = WideModelProcessor(
+            model=model,
+            window_size=250,
+            overlap=0.5,
+            sampling_rate=1000,
+            n_predictions=5,
+            label_encoder=label_encoder
+        )
+        
+        # Setup buffer and intensity processor
         buffer = SignalBuffer(window_size=250, overlap=0.5)
         intensity_processor = IntensityProcessor(scaling_factor=1.5)
         
-        # Debug print
-        print("Starting streamer.stream_processed() loop...")
+        print("Starting EMG data processing loop...")
         
-        # Enable raw data printing for the first few samples
-        print_samples = 5
-        sample_count = 0
-        
-        while True:
-            for chunk in streamer.stream_processed():
-                # Print the first few chunks for debugging
-                if sample_count < print_samples:
-                    print(f"Sample {sample_count}: {chunk[:10]}...") # Print first 10 values
-                    sample_count += 1
+        # Process EMG data continuously
+        for chunk in streamer.stream_processed():
+            # Process for prediction
+            windows = buffer.add_chunk(chunk)
+            intensity_value = None
+            prediction = None
+            
+            for w in windows:
+                prediction = model_processor.process(w)
+                i_metrics = intensity_processor.process(w)
                 
-                # Process for prediction
-                windows = buffer.add_chunk(chunk)
-                intensity_value = None
-                prediction = None
-                
-                for w in windows:
-                    prediction = model_processor.process(w)
-                    i_metrics = intensity_processor.process(w)
-                    
-                    if i_metrics['rms_values'] is not None and len(i_metrics['rms_values']) > 0:
-                        norm_rms = np.array(i_metrics['rms_values']).max() / i_metrics['max_rms_ever']
-                        intensity_value = intensity_calc(norm_rms)
-                
-                # Only when model buffer has enough data
-                if prediction is not None:
-                    chunk_queue.put((prediction, intensity_value))
-                    counter += 1
-                    if counter % 100 == 0:
-                        print(f"Processed {counter} EMG chunks")
+                if i_metrics['rms_values'] is not None and len(i_metrics['rms_values']) > 0:
+                    min_speed, max_speed = 0, 10  # Define min/max speed range
+                    norm_rms = np.array(i_metrics['rms_values']).max() / i_metrics['max_rms_ever']
+                    intensity_value = min_speed + (norm_rms * (max_speed - min_speed))
+            
+            # Only when model buffer has enough data
+            if prediction is not None:
+                queue.put((prediction, intensity_value))
+    
     except Exception as e:
         print(f"Error in EMG processing thread: {e}")
         traceback.print_exc()
@@ -117,36 +107,23 @@ def output_predictions(model_processor, chunk_queue):
             except:
                 print("Error closing BITalino device in processing thread")
 
-# Function to start EMG processing
 def start_emg_processing():
     """Start the EMG processing in a separate process"""
     global emg_process
     
-    # Load model again to ensure it's available to the process
     try:
+        # Find model path
         model_path = glob.glob('models/*')
         if not model_path:
             print("No model files found")
             return False
-            
-        with open(model_path[0], 'rb') as file:
-            model, label_encoder = pickle.load(file)
         
-        # Setup model processor
-        model_processor = WideModelProcessor(
-            model=model,
-            window_size=250,
-            overlap=0.5,
-            sampling_rate=1000,
-            n_predictions=5,
-            label_encoder=label_encoder
-        )
-        print("Model processor created for processing thread")
+        mac_address = "/dev/tty.BITalino-3C-C2"  # BITalino MAC address
         
         # Start EMG processing in a separate process
         emg_process = multiprocessing.Process(
-            target=output_predictions,
-            args=(model_processor, emg_queue)
+            target=process_emg_data,
+            args=(mac_address, model_path[0], emg_queue)
         )
         emg_process.daemon = True
         emg_process.start()
@@ -160,14 +137,14 @@ def start_emg_processing():
         
         print("EMG processing initialized successfully")
         return True
+    
     except Exception as e:
         print(f"Error starting EMG processing: {e}")
         traceback.print_exc()
         return False
 
-# Function to update EMG state
 def update_emg_state():
-    """Update the latest EMG prediction and intensity"""
+    """Update and return the latest EMG prediction and intensity"""
     global latest_prediction, latest_intensity
     
     if not emg_queue.empty():
@@ -184,7 +161,6 @@ def update_emg_state():
     # Return current state
     return latest_prediction, latest_intensity
 
-# Function to shutdown EMG processing
 def shutdown_emg_processing():
     """Shutdown EMG processing"""
     global emg_process
@@ -196,10 +172,11 @@ def shutdown_emg_processing():
         print("EMG processing thread terminated")
 
 def main():
-    global use_emg
+    # Use EMG if available
+    use_emg = EMG_MODULES_AVAILABLE
     
     # Start EMG processing if available
-    if use_emg and EMG_MODULES_AVAILABLE:
+    if use_emg:
         print("Starting EMG processing...")
         emg_initialized = start_emg_processing()
         if not emg_initialized:
@@ -210,7 +187,6 @@ def main():
             # Register cleanup for EMG
             atexit.register(shutdown_emg_processing)
     else:
-        use_emg = False
         print("EMG not available, running in keyboard-only mode")
     
     # Create and run the game manager
