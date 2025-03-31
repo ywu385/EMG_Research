@@ -4,6 +4,7 @@ import pickle
 import multiprocessing
 import numpy as np
 import time
+import traceback
 from game_manager import GameManager
 
 # Import necessary modules for EMG processing
@@ -28,68 +29,16 @@ latest_prediction = "rest"
 latest_intensity = 0.1
 use_emg = True
 
-# Only initialize EMG if modules are available
-if EMG_MODULES_AVAILABLE:
-    try:
-        ######################################################## Loading BitaStreamer ######################################################################
-        batteryThreshold = 30
-        macAddress = "/dev/tty.BITalino-3C-C2"
+# Function to create a fresh BITalino connection
+def create_bitalino_connection():
+    batteryThreshold = 30
+    macAddress = "/dev/tty.BITalino-3C-C2"
 
-        # Connect to the device
-        print(f"Connecting to BITalino device at {macAddress}...")
-        device = BITalino(macAddress)
-        battery = device.battery(batteryThreshold)
-        print(f"Connected to BITalino device. Battery: {battery}%")
-
-        # Create streamer
-        streamer = BitaStreamer(device)
-        print("BITalino streamer created")
-
-        # Setup pipeline
-        pipeline = EMGPipeline()
-        pipeline.add_processor(ZeroChannelRemover())
-        pipeline.add_processor(NotchFilter([60], sampling_rate=1000))
-        pipeline.add_processor(DCRemover())
-
-        # bandpass = ButterFilter(cutoff=[20, 450], sampling_rate=1000, filter_type='bandpass', order=4)
-        # pipeline.add_processor(bandpass)
-        pipeline.add_processor(AdaptiveMaxNormalizer())
-        streamer.add_pipeline(pipeline)
-        print("EMG pipeline created and added")
-
-        # Setup buffer and intensity processor
-        buffer = SignalBuffer(window_size=250, overlap=0.5)
-        intensity_processor = IntensityProcessor(scaling_factor=1.5)
-        print("Buffer and intensity processor created")
-
-        ######################################################## Loading Model ######################################################################
-        # Load model
-        model_path = glob.glob('models/*')
-        if not model_path:
-            print("No model files found")
-            use_emg = False
-        else:
-            with open(model_path[0], 'rb') as file:
-                model, label_encoder = pickle.load(file)
-            print("Model loaded successfully")
-            
-            # Setup model processor
-            model_processor = WideModelProcessor(
-                model=model,
-                window_size=250,
-                overlap=0.5,
-                sampling_rate=1000,
-                n_predictions=5,
-                label_encoder=label_encoder
-            )
-            print("Model processor created")
-    except Exception as e:
-        print(f"Error during EMG initialization: {e}")
-        import traceback
-        traceback.print_exc()
-        use_emg = False
-else:
-    use_emg = False
+    print(f"Connecting to BITalino device at {macAddress}...")
+    device = BITalino(macAddress)
+    battery = device.battery(batteryThreshold)
+    print(f"Connected to BITalino device. Battery: {battery}%")
+    return device
 
 # Function to calculate intensity value from normalized RMS
 def intensity_calc(norm_rms, min_speed=0, max_speed=10):
@@ -103,8 +52,40 @@ def output_predictions(model_processor, chunk_queue):
     counter = 0
     
     try:
+        # Create a new BITalino connection inside the process
+        device = create_bitalino_connection()
+        
+        # Create a fresh streamer
+        streamer = BitaStreamer(device)
+        print("Created fresh BITalino streamer in processing thread")
+        
+        # Setup pipeline
+        pipeline = EMGPipeline()
+        pipeline.add_processor(ZeroChannelRemover())
+        pipeline.add_processor(NotchFilter([60], sampling_rate=1000))
+        pipeline.add_processor(DCRemover())
+        pipeline.add_processor(AdaptiveMaxNormalizer())
+        streamer.add_pipeline(pipeline)
+        print("Pipeline added to streamer in processing thread")
+        
+        # Setup buffer
+        buffer = SignalBuffer(window_size=250, overlap=0.5)
+        intensity_processor = IntensityProcessor(scaling_factor=1.5)
+        
+        # Debug print
+        print("Starting streamer.stream_processed() loop...")
+        
+        # Enable raw data printing for the first few samples
+        print_samples = 5
+        sample_count = 0
+        
         while True:
             for chunk in streamer.stream_processed():
+                # Print the first few chunks for debugging
+                if sample_count < print_samples:
+                    print(f"Sample {sample_count}: {chunk[:10]}...") # Print first 10 values
+                    sample_count += 1
+                
                 # Process for prediction
                 windows = buffer.add_chunk(chunk)
                 intensity_value = None
@@ -126,31 +107,63 @@ def output_predictions(model_processor, chunk_queue):
                         print(f"Processed {counter} EMG chunks")
     except Exception as e:
         print(f"Error in EMG processing thread: {e}")
-        import traceback
         traceback.print_exc()
+    finally:
+        # Ensure device is properly closed
+        if 'device' in locals():
+            try:
+                device.close()
+                print("BITalino device closed in processing thread")
+            except:
+                print("Error closing BITalino device in processing thread")
 
 # Function to start EMG processing
 def start_emg_processing():
     """Start the EMG processing in a separate process"""
     global emg_process
     
-    # Start EMG processing in a separate process
-    emg_process = multiprocessing.Process(
-        target=output_predictions,
-        args=(model_processor, emg_queue)
-    )
-    emg_process.daemon = True
-    emg_process.start()
-    
-    # Short delay to ensure process has started
-    time.sleep(1)
-    
-    if not emg_process.is_alive():
-        print("EMG process failed to start")
+    # Load model again to ensure it's available to the process
+    try:
+        model_path = glob.glob('models/*')
+        if not model_path:
+            print("No model files found")
+            return False
+            
+        with open(model_path[0], 'rb') as file:
+            model, label_encoder = pickle.load(file)
+        
+        # Setup model processor
+        model_processor = WideModelProcessor(
+            model=model,
+            window_size=250,
+            overlap=0.5,
+            sampling_rate=1000,
+            n_predictions=5,
+            label_encoder=label_encoder
+        )
+        print("Model processor created for processing thread")
+        
+        # Start EMG processing in a separate process
+        emg_process = multiprocessing.Process(
+            target=output_predictions,
+            args=(model_processor, emg_queue)
+        )
+        emg_process.daemon = True
+        emg_process.start()
+        
+        # Short delay to ensure process has started
+        time.sleep(2)
+        
+        if not emg_process.is_alive():
+            print("EMG process failed to start")
+            return False
+        
+        print("EMG processing initialized successfully")
+        return True
+    except Exception as e:
+        print(f"Error starting EMG processing: {e}")
+        traceback.print_exc()
         return False
-    
-    print("EMG processing initialized successfully")
-    return True
 
 # Function to update EMG state
 def update_emg_state():
@@ -174,27 +187,20 @@ def update_emg_state():
 # Function to shutdown EMG processing
 def shutdown_emg_processing():
     """Shutdown EMG processing"""
-    global emg_process, device
+    global emg_process
     
     if emg_process is not None and emg_process.is_alive():
         print("Shutting down EMG processing thread...")
         emg_process.terminate()
         emg_process.join(timeout=1.0)
         print("EMG processing thread terminated")
-    
-    # Close the device connection if it exists
-    if 'device' in globals():
-        try:
-            device.close()
-            print("BITalino device closed")
-        except Exception as e:
-            print(f"Error closing BITalino device: {e}")
 
 def main():
     global use_emg
     
     # Start EMG processing if available
-    if use_emg:
+    if use_emg and EMG_MODULES_AVAILABLE:
+        print("Starting EMG processing...")
         emg_initialized = start_emg_processing()
         if not emg_initialized:
             print("Warning: EMG processing failed to start, falling back to keyboard mode")
@@ -204,6 +210,7 @@ def main():
             # Register cleanup for EMG
             atexit.register(shutdown_emg_processing)
     else:
+        use_emg = False
         print("EMG not available, running in keyboard-only mode")
     
     # Create and run the game manager
