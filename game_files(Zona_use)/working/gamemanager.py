@@ -113,7 +113,7 @@ class GameManager:
             self.esc_pressed = False
         
         # Process EMG data
-        self.process_emg_data()
+        # self.process_emg_data()
         
         # Handle movement input
         if self.target_game.state == self.target_game.STATE_PLAYING:
