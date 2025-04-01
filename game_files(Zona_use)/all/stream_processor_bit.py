@@ -31,10 +31,10 @@ class EMGPipeline:
             self.initialize(data)
         result = data
         for processor in self.processors:
-            try:
-                result = processor.process(result)
-            except Exception as e:
-                print(f'{processor.name} failed for {e}')
+            # try:
+            result = processor.process(result)
+            # except Exception as e:
+            #     print(f'{processor.name} failed for {e}')
         return result
     
 
