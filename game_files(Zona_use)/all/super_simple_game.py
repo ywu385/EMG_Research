@@ -121,7 +121,7 @@ else:
 #                 counter += 1
 
 # Small queue for real-time communication - only keeps most recent predictions
-chunk_queue = multiprocessing.Queue(maxsize=4)
+emg_queue = multiprocessing.Queue(maxsize=4)
 
 # Function to process EMG data and put into queue
 def process_emg_data(chunk_queue):
