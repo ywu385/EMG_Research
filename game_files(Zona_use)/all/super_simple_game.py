@@ -120,8 +120,7 @@ else:
 #                 print(counter)
 #                 counter += 1
 
-# Small queue for real-time communication - only keeps most recent predictions
-emg_queue = multiprocessing.Queue(maxsize=4)
+
 
 # Function to process EMG data and put into queue
 def process_emg_data(model_processor, chunk_queue):
@@ -217,37 +216,64 @@ def shutdown_emg():
 # Register the shutdown function
 atexit.register(shutdown_emg)
 
+# Small queue for real-time communication - only keeps most recent predictions
+emg_queue = multiprocessing.Queue(maxsize=4)
+
 # Main function
 def main():
-    if start_predictions():
-        print("EMG predictions started. Reading from queue...")
+
+    prediction_thread =  multiprocessing.Process(
+        target=process_emg_data,
+        args=(model_processor, emg_queue)
+    )
+
+    prediction_thread.start()
+    
+    latest_prediction = "none"
+    latest_intensity = 0.1  # Default intensity value
+    
+    # Smoothing parameters for intensity
+    target_intensity = 0.1  # Target intensity (where we want to go)
+    intensity_smoothing = 0.15  # How fast we reach the target (0.0-1.0)
+
+    if not emg_queue.empty():
+        prediction_data = emg_queue.get_nowait()
+        latest_prediction = prediction_data[0]
+
+        if prediction_data[1] is not None:
+            target_intensity = prediction_data[1]
+            
+        print(f'Received: Prediction={latest_prediction}, Intensity = {target_intensity:.2f}')
+
+    # if start_predictions():
+    #     print("EMG predictions started. Reading from queue...")
         
-        start_time = time.time()
-        last_time_check = start_time
+    #     start_time = time.time()
+    #     last_time_check = start_time
         
-        try:
-            # Simple loop to read and print EMG data
-            while True:
-                current_time = time.time()
-                elapsed_time = current_time - start_time
+    #     try:
+    #         # Simple loop to read and print EMG data
+    #         while True:
+    #             current_time = time.time()
+    #             elapsed_time = current_time - start_time
                 
-                # # Print time update every 10 seconds
-                # if current_time - last_time_check >= 10:
-                #     print(f"Time elapsed: >>>>>>>>>>>>>>>>>>>> {elapsed_time:.1f} seconds")
-                #     last_time_check = current_time
+    #             # # Print time update every 10 seconds
+    #             # if current_time - last_time_check >= 10:
+    #             #     print(f"Time elapsed: >>>>>>>>>>>>>>>>>>>> {elapsed_time:.1f} seconds")
+    #             #     last_time_check = current_time
                 
-                if not emg_queue.empty():
-                    prediction, intensity = emg_queue.get_nowait()
-                    print(f"Received: Prediction={prediction}, Intensity={intensity:.2f}")
+    #             if not emg_queue.empty():
+    #                 prediction, intensity = emg_queue.get_nowait()
+    #                 print(f"Received: Prediction={prediction}, Intensity={intensity:.2f}")
                 
-                # time.sleep(0.1)  # Small delay to prevent CPU hogging
+    #             # time.sleep(0.1)  # Small delay to prevent CPU hogging
         
-        except KeyboardInterrupt:
-            print("Interrupted by user")
-            total_time = time.time() - start_time
-            print(f"Total runtime: {total_time:.1f} seconds")
-    else:
-        print("Failed to start EMG predictions")
+    #     except KeyboardInterrupt:
+    #         print("Interrupted by user")
+    #         total_time = time.time() - start_time
+    #         print(f"Total runtime: {total_time:.1f} seconds")
+    # else:
+    #     print("Failed to start EMG predictions")
 
 if __name__ == "__main__":
     main()
