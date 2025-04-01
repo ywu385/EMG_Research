@@ -220,8 +220,7 @@ class WideModelProcessor(SignalProcessor):
             return mode(self.prediction_history)
         else:
             return pred
-
-    
+   
 
 
 class IntensityProcessor:
