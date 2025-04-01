@@ -1,4 +1,3 @@
-#%%
 import multiprocessing
 import time
 import traceback
@@ -20,9 +19,12 @@ except ImportError as e:
     print(f"Error importing EMG modules: {e}")
     EMG_MODULES_AVAILABLE = False
 
+# Define queue at the top BEFORE it's used elsewhere
+# Small queue for real-time communication - only keeps most recent predictions
+emg_queue = multiprocessing.Queue(maxsize=4)
+
 # Global variables and initialization
 print("Initializing EMG components at global level...")
-#%%
 
 # Find the model path
 model_paths = glob.glob('./models/lgb*.pkl')
@@ -71,7 +73,6 @@ if EMG_MODULES_AVAILABLE:
             label_encoder=label_encoder
         )
         
-        
         # Setup buffer and intensity processor
         buffer = SignalBuffer(window_size=250, overlap=0.5)
         intensity_processor = IntensityProcessor(scaling_factor=1.5)
@@ -87,48 +88,12 @@ if EMG_MODULES_AVAILABLE:
 else:
     emg_initialized = False
 
-# # Function to calculate intensity value from normalized RMS
-# def intensity_calc(norm_rms, min_speed=0.1, max_speed=1.0):
-#     return min_speed + (norm_rms * (max_speed - min_speed))
-
-# ### Defines a process that outputs the prediction and puts it in the queue ###
-# def output_predictions(model_processor, chunk_queue):
-#     counter = 0
-#     while True:
-#         for chunk in streamer.stream_processed():
-#             # Process for prediction
-#             # prediction = model_processor.process(chunk)
-            
-#             # Process for intensity
-#             windows = buffer.add_chunk(chunk)
-#             intensity_value = None
-#             prediction = None
-            
-#             for w in windows:
-#                 prediction = model_processor.process(w) #processes and outputs predictions
-#                 i_metrics = intensity_processor.process(w) # outputs dict with other values
-#                 norm_rms = np.array(i_metrics['rms_values']).max()/i_metrics['max_rms_ever']
-#                 intensity_value = intensity_calc(norm_rms)
-            
-#             # Only when model buffer has enough data
-#             if prediction is not None:
-#                 print(f"Prediction: {prediction}")
-#                 # Send both prediction and intensity value to the main process
-#                 chunk_queue.put((prediction, intensity_value))
-#                 print(counter)
-#                 counter += 1
-
-
-
 # Function to process EMG data and put into queue
 def process_emg_data(model_processor, chunk_queue):
-    # Using global components from main process
-    # global streamer, buffer, intensity_processor
-    
     counter = 0
     print("Starting to process EMG data...")
     
-    while True:  # Add this outer loop
+    while True:  # This outer loop is crucial for reconnection
         try:
             # Process EMG data continuously
             print("Connecting to stream...")
@@ -149,7 +114,16 @@ def process_emg_data(model_processor, chunk_queue):
                 
                 # Only when model buffer has enough data
                 if prediction is not None:
-                    chunk_queue.put((prediction, intensity_value))
+                    # Handle full queue by making space for new data
+                    if chunk_queue.full():
+                        try:
+                            # Remove oldest item to make space
+                            chunk_queue.get_nowait()
+                        except:
+                            pass  # Ignore any errors
+                            
+                    # Add newest prediction
+                    chunk_queue.put((prediction, intensity_value), block=False)
                     print(f"Prediction {counter}: {prediction}, intensity={intensity_value:.2f}")
                     counter += 1
                     
@@ -161,38 +135,6 @@ def process_emg_data(model_processor, chunk_queue):
 
 # Process for running EMG
 emg_process = None
-
-# Function to start the prediction thread
-def start_predictions():
-    global emg_process
-    
-    if not emg_initialized:
-        print("EMG components not initialized. Cannot start processing.")
-        return False
-    
-    try:
-        # Start prediction thread
-        emg_process = multiprocessing.Process(
-            target=process_emg_data,
-            args=(model_processor,emg_queue)
-        )
-        # emg_process.daemon = True
-        emg_process.start()
-        
-        # Short delay to ensure process has started
-        time.sleep(1)
-        
-        if not emg_process.is_alive():
-            print("EMG process failed to start")
-            return False
-        
-        print("EMG processing started successfully")
-        return True
-    
-    except Exception as e:
-        print(f"Error starting EMG processing: {e}")
-        traceback.print_exc()
-        return False
 
 # Function to shutdown EMG processing
 def shutdown_emg():
@@ -214,64 +156,95 @@ def shutdown_emg():
 # Register the shutdown function
 atexit.register(shutdown_emg)
 
-# Small queue for real-time communication - only keeps most recent predictions
-emg_queue = multiprocessing.Queue(maxsize=4)
+# Helper function to safely clear the queue
+def clear_queue():
+    """Clear all items from the queue"""
+    count = 0
+    while not emg_queue.empty():
+        try:
+            emg_queue.get_nowait()
+            count += 1
+        except:
+            break
+    if count > 0:
+        print(f"Cleared {count} items from the queue")
 
 # Main function
 def main():
-
-    prediction_thread =  multiprocessing.Process(
-        target=process_emg_data,
-        args=(model_processor, emg_queue)
-    )
-
-    prediction_thread.start()
+    global emg_process
     
-    latest_prediction = "none"
-    latest_intensity = 0.1  # Default intensity value
+    if not emg_initialized:
+        print("EMG components not initialized. Cannot start processing.")
+        return
     
-    # Smoothing parameters for intensity
-    target_intensity = 0.1  # Target intensity (where we want to go)
-    intensity_smoothing = 0.15  # How fast we reach the target (0.0-1.0)
-
-    if not emg_queue.empty():
-        prediction_data = emg_queue.get_nowait()
-        latest_prediction = prediction_data[0]
-
-        if prediction_data[1] is not None:
-            target_intensity = prediction_data[1]
+    # Start prediction thread
+    try:
+        # Clear the queue before starting
+        clear_queue()
+        
+        # Create and start the process
+        emg_process = multiprocessing.Process(
+            target=process_emg_data,
+            args=(model_processor, emg_queue)
+        )
+        # Don't use daemon=True as it might cause issues with resource handling
+        emg_process.start()
+        
+        # Short delay to ensure process has started
+        time.sleep(1)
+        
+        if not emg_process.is_alive():
+            print("EMG process failed to start")
+            return
+        
+        print("EMG processing started successfully")
+    except Exception as e:
+        print(f"Error starting EMG processing: {e}")
+        traceback.print_exc()
+        return
+    
+    # Main loop to read from queue and print results
+    print("Reading from queue...")
+    start_time = time.time()
+    last_time_check = start_time
+    
+    try:
+        # Simple loop to read and print EMG data
+        while True:
+            current_time = time.time()
+            elapsed_time = current_time - start_time
             
-        print(f'Received: Prediction={latest_prediction}, Intensity = {target_intensity:.2f}')
-
-    # if start_predictions():
-    #     print("EMG predictions started. Reading from queue...")
-        
-    #     start_time = time.time()
-    #     last_time_check = start_time
-        
-    #     try:
-    #         # Simple loop to read and print EMG data
-    #         while True:
-    #             current_time = time.time()
-    #             elapsed_time = current_time - start_time
-                
-    #             # # Print time update every 10 seconds
-    #             # if current_time - last_time_check >= 10:
-    #             #     print(f"Time elapsed: >>>>>>>>>>>>>>>>>>>> {elapsed_time:.1f} seconds")
-    #             #     last_time_check = current_time
-                
-    #             if not emg_queue.empty():
-    #                 prediction, intensity = emg_queue.get_nowait()
-    #                 print(f"Received: Prediction={prediction}, Intensity={intensity:.2f}")
-                
-    #             # time.sleep(0.1)  # Small delay to prevent CPU hogging
-        
-    #     except KeyboardInterrupt:
-    #         print("Interrupted by user")
-    #         total_time = time.time() - start_time
-    #         print(f"Total runtime: {total_time:.1f} seconds")
-    # else:
-    #     print("Failed to start EMG predictions")
+            # Print time update every 10 seconds
+            if current_time - last_time_check >= 10:
+                print(f"Time elapsed: {elapsed_time:.1f} seconds")
+                # Safely check if queue has items without using qsize()
+                has_items = not emg_queue.empty()
+                print(f"Queue has items: {has_items}")
+                last_time_check = current_time
+            
+            # Process data from the queue
+            if not emg_queue.empty():
+                try:
+                    prediction, intensity = emg_queue.get_nowait()
+                    print(f"Received: Prediction={prediction}, Intensity={intensity:.2f}")
+                except:
+                    # Handle any queue retrieval errors
+                    pass
+            
+            time.sleep(0.1)  # Small delay to prevent CPU hogging
+    
+    except KeyboardInterrupt:
+        print("Interrupted by user")
+        total_time = time.time() - start_time
+        print(f"Total runtime: {total_time:.1f} seconds")
+    
+    finally:
+        # Ensure cleanup happens properly
+        if emg_process is not None and emg_process.is_alive():
+            print("Terminating EMG process...")
+            emg_process.terminate()
+            emg_process.join(timeout=1.0)
+            print("EMG process terminated")
 
 if __name__ == "__main__":
     main()
