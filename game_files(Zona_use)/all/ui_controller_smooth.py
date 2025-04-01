@@ -9,7 +9,7 @@ from post_processing import *
 import glob
 
 # #%%
-model_path = "/Users/adampochobut/Desktop/CompleteBuild/models/RandomForestClassifier2.pkl"
+model_path = "models/RandomForestClassifier2.pkl"
 models = glob.glob(model_path)
 
 print(models)
