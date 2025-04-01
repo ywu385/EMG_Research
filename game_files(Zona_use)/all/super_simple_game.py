@@ -22,8 +22,9 @@ except ImportError as e:
 # Global variables and initialization
 print("Initializing EMG components at global level...")
 
-# Queue for communication
-emg_queue = multiprocessing.Queue()
+# Small queue for real-time communication - only keeps most recent predictions
+emg_queue = multiprocessing.Queue(maxsize=4)
+
 
 # Find the model path
 model_paths = glob.glob('./models/*.pkl')
