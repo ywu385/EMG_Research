@@ -180,18 +180,32 @@ def main():
     if start_predictions():
         print("EMG predictions started. Reading from queue...")
         
+        start_time = time.time()
+        last_time_check = start_time
+        
         try:
             # Simple loop to read and print EMG data
             while True:
+                current_time = time.time()
+                elapsed_time = current_time - start_time
+                
+                # Print time update every 10 seconds
+                if current_time - last_time_check >= 10:
+                    print(f"Time elapsed: {elapsed_time:.1f} seconds")
+                    last_time_check = current_time
+                
                 if not emg_queue.empty():
                     prediction, intensity = emg_queue.get_nowait()
                     print(f"Received: Prediction={prediction}, Intensity={intensity:.2f}")
+                
                 time.sleep(0.1)  # Small delay to prevent CPU hogging
         
         except KeyboardInterrupt:
             print("Interrupted by user")
+            total_time = time.time() - start_time
+            print(f"Total runtime: {total_time:.1f} seconds")
     else:
         print("Failed to start EMG predictions")
 
 if __name__ == "__main__":
-    main()
+    main
