@@ -124,9 +124,9 @@ else:
 emg_queue = multiprocessing.Queue(maxsize=4)
 
 # Function to process EMG data and put into queue
-def process_emg_data(chunk_queue):
+def process_emg_data(model_processor, chunk_queue):
     # Using global components from main process
-    global streamer, buffer, model_processor, intensity_processor
+    # global streamer, buffer, intensity_processor
     
     counter = 0
     print("Starting to process EMG data...")
@@ -177,9 +177,9 @@ def start_predictions():
         # Start prediction thread
         emg_process = multiprocessing.Process(
             target=process_emg_data,
-            args=(emg_queue,)
+            args=(emg_queue,model_processor)
         )
-        emg_process.daemon = True
+        # emg_process.daemon = True
         emg_process.start()
         
         # Short delay to ensure process has started
@@ -233,7 +233,7 @@ def main():
                 
                 # Print time update every 10 seconds
                 if current_time - last_time_check >= 10:
-                    print(f"Time elapsed: {elapsed_time:.1f} seconds")
+                    print(f"Time elapsed: >>>>>>>>>>>>>>>>>>>> {elapsed_time:.1f} seconds")
                     last_time_check = current_time
                 
                 if not emg_queue.empty():
