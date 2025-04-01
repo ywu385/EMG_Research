@@ -23,8 +23,7 @@ except ImportError as e:
 # Global variables and initialization
 print("Initializing EMG components at global level...")
 #%%
-# Small queue for real-time communication - only keeps most recent predictions
-emg_queue = multiprocessing.Queue(maxsize=4)
+
 
 
 # Find the model path
@@ -90,40 +89,78 @@ if EMG_MODULES_AVAILABLE:
 else:
     emg_initialized = False
 
+# # Function to calculate intensity value from normalized RMS
+# def intensity_calc(norm_rms, min_speed=0.1, max_speed=1.0):
+#     return min_speed + (norm_rms * (max_speed - min_speed))
+
+# ### Defines a process that outputs the prediction and puts it in the queue ###
+# def output_predictions(model_processor, chunk_queue):
+#     counter = 0
+#     while True:
+#         for chunk in streamer.stream_processed():
+#             # Process for prediction
+#             # prediction = model_processor.process(chunk)
+            
+#             # Process for intensity
+#             windows = buffer.add_chunk(chunk)
+#             intensity_value = None
+#             prediction = None
+            
+#             for w in windows:
+#                 prediction = model_processor.process(w) #processes and outputs predictions
+#                 i_metrics = intensity_processor.process(w) # outputs dict with other values
+#                 norm_rms = np.array(i_metrics['rms_values']).max()/i_metrics['max_rms_ever']
+#                 intensity_value = intensity_calc(norm_rms)
+            
+#             # Only when model buffer has enough data
+#             if prediction is not None:
+#                 print(f"Prediction: {prediction}")
+#                 # Send both prediction and intensity value to the main process
+#                 chunk_queue.put((prediction, intensity_value))
+#                 print(counter)
+#                 counter += 1
+
+# Small queue for real-time communication - only keeps most recent predictions
+chunk_queue = multiprocessing.Queue(maxsize=4)
+
 # Function to process EMG data and put into queue
 def process_emg_data(chunk_queue):
     # Using global components from main process
-    global streamer, buffer, intensity_processor
+    global streamer, buffer, model_processor, intensity_processor
     
     counter = 0
     print("Starting to process EMG data...")
     
-    try:
-        # Process EMG data continuously
-        for chunk in streamer.stream_processed():
-            # Process for prediction
-            windows = buffer.add_chunk(chunk)
-            intensity_value = None
-            prediction = None
-            
-            for w in windows:
-                prediction = model_processor.process(w)
-                i_metrics = intensity_processor.process(w)
+    while True:  # Add this outer loop
+        try:
+            # Process EMG data continuously
+            print("Connecting to stream...")
+            for chunk in streamer.stream_processed():
+                # Process for prediction
+                windows = buffer.add_chunk(chunk)
+                intensity_value = None
+                prediction = None
                 
-                if i_metrics['rms_values'] is not None and len(i_metrics['rms_values']) > 0:
-                    min_speed, max_speed = 0, 10  # Define min/max speed range
-                    norm_rms = np.array(i_metrics['rms_values']).max() / i_metrics['max_rms_ever']
-                    intensity_value = min_speed + (norm_rms * (max_speed - min_speed))
-            
-            # Only when model buffer has enough data
-            if prediction is not None:
-                chunk_queue.put((prediction, intensity_value))
-                print(f"Prediction {counter}: {prediction}, intensity={intensity_value:.2f}")
-                counter += 1
-    
-    except Exception as e:
-        print(f"Error processing EMG data: {e}")
-        traceback.print_exc()
+                for w in windows:
+                    prediction = model_processor.process(w)
+                    i_metrics = intensity_processor.process(w)
+                    
+                    if i_metrics['rms_values'] is not None and len(i_metrics['rms_values']) > 0:
+                        min_speed, max_speed = 0, 10  # Define min/max speed range
+                        norm_rms = np.array(i_metrics['rms_values']).max() / i_metrics['max_rms_ever']
+                        intensity_value = min_speed + (norm_rms * (max_speed - min_speed))
+                
+                # Only when model buffer has enough data
+                if prediction is not None:
+                    chunk_queue.put((prediction, intensity_value))
+                    print(f"Prediction {counter}: {prediction}, intensity={intensity_value:.2f}")
+                    counter += 1
+                    
+        except Exception as e:
+            print(f"Error processing EMG data: {e}")
+            traceback.print_exc()
+            print("Will attempt to reconnect in 3 seconds...")
+            time.sleep(3)  # Wait before retrying
 
 # Process for running EMG
 emg_process = None
