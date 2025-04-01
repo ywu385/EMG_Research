@@ -20,7 +20,7 @@ except ImportError as e:
     EMG_MODULES_AVAILABLE = False
 
 # Small queue for real-time communication - only keeps most recent predictions
-emg_queue = multiprocessing.Queue(maxsize=)
+emg_queue = multiprocessing.Queue(maxsize=5)
 
 # Global variables and initialization
 print("Initializing EMG components at global level...")
