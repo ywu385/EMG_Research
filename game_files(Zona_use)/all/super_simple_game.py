@@ -1,3 +1,4 @@
+#%%
 import multiprocessing
 import time
 import traceback
@@ -21,7 +22,7 @@ except ImportError as e:
 
 # Global variables and initialization
 print("Initializing EMG components at global level...")
-
+#%%
 # Small queue for real-time communication - only keeps most recent predictions
 emg_queue = multiprocessing.Queue(maxsize=4)
 
@@ -34,7 +35,7 @@ if model_paths:
     
     # Load model
     with open(model_path, 'rb') as file:
-        model = pickle.load(file)
+        model, label_encoder = pickle.load(file)
     print("Model loaded at global level")
 else:
     print("No model files found")
@@ -64,12 +65,15 @@ if EMG_MODULES_AVAILABLE:
         print("Pipeline added to streamer at global level")
         
         # Setup model processor
-        model_processor = ModelProcessor(
+        model_processor = WideModelProcessor(
             model=model,
             window_size=250,
             overlap=0.5,
-            sampling_rate=1000
+            sampling_rate=1000,
+            n_predictions=5,
+            label_encoder=label_encoder
         )
+        
         
         # Setup buffer and intensity processor
         buffer = SignalBuffer(window_size=250, overlap=0.5)
@@ -87,9 +91,9 @@ else:
     emg_initialized = False
 
 # Function to process EMG data and put into queue
-def process_emg_data(chunk_queue):
+def process_emg_data(model_processor, chunk_queue):
     # Using global components from main process
-    global streamer, buffer, model_processor, intensity_processor
+    global streamer, buffer, intensity_processor
     
     counter = 0
     print("Starting to process EMG data...")
@@ -209,4 +213,4 @@ def main():
         print("Failed to start EMG predictions")
 
 if __name__ == "__main__":
-    main
+    main()
