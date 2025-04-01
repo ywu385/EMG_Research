@@ -199,7 +199,7 @@ def main():
                     prediction, intensity = emg_queue.get_nowait()
                     print(f"Received: Prediction={prediction}, Intensity={intensity:.2f}")
                 
-                time.sleep(0.1)  # Small delay to prevent CPU hogging
+                # time.sleep(0.1)  # Small delay to prevent CPU hogging
         
         except KeyboardInterrupt:
             print("Interrupted by user")
