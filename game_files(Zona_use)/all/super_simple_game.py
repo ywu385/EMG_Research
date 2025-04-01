@@ -177,7 +177,7 @@ def start_predictions():
         # Start prediction thread
         emg_process = multiprocessing.Process(
             target=process_emg_data,
-            args=(emg_queue,model_processor)
+            args=(model_processor,emg_queue)
         )
         # emg_process.daemon = True
         emg_process.start()
