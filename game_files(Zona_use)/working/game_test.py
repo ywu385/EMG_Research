@@ -288,3 +288,6 @@ def main():
     pygame.quit()
     shutdown_emg()
     sys.exit()
+
+if __name__ == '__main__':
+    main()
