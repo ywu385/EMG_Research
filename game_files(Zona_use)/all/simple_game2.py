@@ -20,7 +20,7 @@ except ImportError as e:
     EMG_MODULES_AVAILABLE = False
 
 # Small queue for real-time communication - only keeps most recent predictions
-emg_queue = multiprocessing.Queue(maxsize=4)
+emg_queue = multiprocessing.Queue(maxsize=)
 
 # Global variables and initialization
 print("Initializing EMG components at global level...")
@@ -152,24 +152,6 @@ def shutdown_emg():
 # Register the shutdown function
 atexit.register(shutdown_emg)
 
-# Helper to close resources properly
-def close_resources():
-    if 'device' in globals():
-        try:
-            device.close()
-            print("Device closed during cleanup")
-        except:
-            pass
-    
-    # Additional cleanup for other resources
-    if 'emg_process' in globals() and emg_process is not None:
-        if emg_process.is_alive():
-            emg_process.terminate()
-            emg_process.join(timeout=0.5)
-
-# Register the resource cleanup function
-atexit.register(close_resources)
-
 # Main function
 def main():
     global emg_process
@@ -197,17 +179,7 @@ def main():
                 # Print time update every 10 seconds
                 if current_time - last_time_check >= 10:
                     print(f"Time elapsed: {elapsed_time:.1f} seconds")
-                    # Avoid using qsize() which can be unreliable
-                    try:
-                        # Use a safer approach to check queue size
-                        queue_size = 0
-                        for _ in range(100):  # Limit check to avoid infinite loop
-                            if emg_queue.empty():
-                                break
-                            queue_size += 1
-                        print(f"Queue has items: {queue_size > 0}")
-                    except:
-                        print("Queue status check skipped")
+                    # print(f"Queue size: ~{emg_queue.qsize()} items")
                     last_time_check = current_time
                 
                 if not emg_queue.empty():
@@ -220,32 +192,8 @@ def main():
             print("Interrupted by user")
             total_time = time.time() - start_time
             print(f"Total runtime: {total_time:.1f} seconds")
-            
-            # Explicitly clean up resources on interrupt
-            if emg_process is not None and emg_process.is_alive():
-                print("Terminating EMG process...")
-                emg_process.terminate()
-                emg_process.join(timeout=1.0)
-                print("EMG process terminated")
-            
-            # Empty the queue to release any waiting resources
-            while not emg_queue.empty():
-                try:
-                    emg_queue.get_nowait()
-                except:
-                    break
     else:
         print("EMG not initialized, cannot start processing")
 
 if __name__ == "__main__":
-    try:
-        main()
-    finally:
-        # Ensure all resources are properly cleaned up
-        close_resources()
-        
-        # Close the queue explicitly
-        emg_queue.close()
-        emg_queue.join_thread()  # Wait for background thread to exit
-        
-        print("All resources closed")
+    main()
