@@ -91,7 +91,7 @@ else:
     emg_initialized = False
 
 # Function to process EMG data and put into queue
-def process_emg_data(model_processor, chunk_queue):
+def process_emg_data(chunk_queue):
     # Using global components from main process
     global streamer, buffer, intensity_processor
     
