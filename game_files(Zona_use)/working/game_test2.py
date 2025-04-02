@@ -68,7 +68,7 @@ if EMG_MODULES_AVAILABLE:
         pipeline.add_processor(ZeroChannelRemover())
         pipeline.add_processor(NotchFilter([60], sampling_rate=1000))
         pipeline.add_processor(DCRemover())
-        pipeline.add_processor(AdaptiveMaxNormalizer())
+        # pipeline.add_processor(AdaptiveMaxNormalizer())
         streamer.add_pipeline(pipeline)
         print("Pipeline added to streamer at global level")
         
@@ -81,6 +81,13 @@ if EMG_MODULES_AVAILABLE:
             n_predictions=5,
             label_encoder=label_encoder
         )
+        # model_processor = ModelProcessor(
+        #     model = model,
+        #     window_size = 250,
+        #     overlap=0.5,
+
+        # )
+
         
         # Setup buffer and intensity processor
         buffer = SignalBuffer(window_size=250, overlap=0.5)
@@ -248,6 +255,7 @@ def main():
         'downward': 'down',
         'inward': 'left',
         'outward': 'right',
+        'rest':'rest'
         # Add mappings for your specific model outputs
     }
     

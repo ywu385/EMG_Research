@@ -196,6 +196,8 @@ class GameManager:
                 self.camera_y -= scroll_speed
             elif self.latest_prediction == "down":
                 self.camera_y += scroll_speed
+            elif self.latest_prediction == 'rest':
+                pass
     
     def update(self):
         """Update game state"""
