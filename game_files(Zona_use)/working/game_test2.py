@@ -56,7 +56,7 @@ if EMG_MODULES_AVAILABLE:
     try:
         # Setup device
         device = BITalino(mac_address)
-        device.battery(30)
+        device.battery(10)
         print("BITalino connected at global level")
         
         # Setup streamer
