@@ -35,7 +35,7 @@ emg_queue = multiprocessing.Queue(maxsize=4)
 print("Initializing EMG components at global level...")
 
 # Find the model path
-model_paths = glob.glob('./models/lgb*.pkl')
+model_paths = glob.glob('./working_models/lgb_zona.pkl')
 if model_paths:
     model_path = model_paths[0]
     print(f"Found model: {model_path}")
