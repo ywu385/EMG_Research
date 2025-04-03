@@ -30,7 +30,7 @@ except ImportError as e:
 
 # Define queue at the top BEFORE it's used elsewhere
 # Small queue for real-time communication - only keeps most recent predictions
-emg_queue = multiprocessing.Queue(maxsize=10)
+emg_queue = multiprocessing.Queue(maxsize=5)
 
 # Global variables and initialization
 print("Initializing EMG components at global level...")
@@ -81,7 +81,7 @@ if EMG_MODULES_AVAILABLE:
             window_size=250,
             overlap=0.5,
             sampling_rate=1000,
-            n_predictions=2,
+            n_predictions=3,
             label_encoder=label_encoder
         )
         # model_processor = ModelProcessor(
