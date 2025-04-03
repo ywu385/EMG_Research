@@ -186,3 +186,7 @@ video_viz*
 
 /signal_processing_src*
 /frontend*
+
+**/notebooks/**
+**/old_games/**
+**/all/**
