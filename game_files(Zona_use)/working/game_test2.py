@@ -30,7 +30,7 @@ except ImportError as e:
 
 # Define queue at the top BEFORE it's used elsewhere
 # Small queue for real-time communication - only keeps most recent predictions
-emg_queue = multiprocessing.Queue(maxsize=4)
+emg_queue = multiprocessing.Queue(maxsize=10)
 
 # Global variables and initialization
 print("Initializing EMG components at global level...")
