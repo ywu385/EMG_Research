@@ -35,7 +35,7 @@ emg_queue = multiprocessing.Queue(maxsize=4)
 print("Initializing EMG components at global level...")
 
 # Find the model path
-model_paths = glob.glob('./working_models/lgb_zona.pkl')
+model_paths = glob.glob('./working_models/lgb_zona_2_classes.pkl')
 if model_paths:
     model_path = model_paths[0]
     print(f"Found model: {model_path}")
@@ -68,7 +68,9 @@ if EMG_MODULES_AVAILABLE:
         pipeline.add_processor(ZeroChannelRemover())
         pipeline.add_processor(NotchFilter([60], sampling_rate=1000))
         pipeline.add_processor(DCRemover())
-        # pipeline.add_processor(AdaptiveMaxNormalizer())
+        bandpass = ButterFilter(cutoff=[20, 450], sampling_rate=1000, filter_type='bandpass', order=4)
+        pipeline.add_processor(bandpass)
+        pipeline.add_processor(AdaptiveMaxNormalizer())
         streamer.add_pipeline(pipeline)
         print("Pipeline added to streamer at global level")
         
