@@ -1,3 +1,4 @@
+#%%
 import pygame
 import multiprocessing
 import time
@@ -13,7 +14,7 @@ import random
 from target_game import TargetGame
 from gamemanager2 import GameManager
 from spriralgame import GridSpiralChallenge
-
+#%%
 # Import your custom EMG modules
 try:
     from stream_processor_bit import *
@@ -33,7 +34,7 @@ emg_queue = multiprocessing.Queue(maxsize=4)
 
 # Global variables and initialization
 print("Initializing EMG components at global level...")
-
+#%%
 # Find the model path
 model_paths = glob.glob('./working_models/lgb_zona_2_classes.pkl')
 if model_paths:
@@ -47,7 +48,7 @@ if model_paths:
 else:
     print("No model files found")
     model = None
-
+#%%
 # BITalino MAC address
 mac_address = "/dev/tty.BITalino-3C-C2"  # Update with your device's address
 
