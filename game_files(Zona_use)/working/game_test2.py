@@ -69,8 +69,8 @@ if EMG_MODULES_AVAILABLE:
         pipeline.add_processor(ZeroChannelRemover())
         pipeline.add_processor(NotchFilter([60], sampling_rate=1000))
         pipeline.add_processor(DCRemover())
-        bandpass = ButterFilter(cutoff=[20, 450], sampling_rate=1000, filter_type='bandpass', order=4)
-        pipeline.add_processor(bandpass)
+        # bandpass = ButterFilter(cutoff=[20, 450], sampling_rate=1000, filter_type='bandpass', order=4)
+        # pipeline.add_processor(bandpass)
         pipeline.add_processor(AdaptiveMaxNormalizer())
         streamer.add_pipeline(pipeline)
         print("Pipeline added to streamer at global level")
@@ -81,7 +81,7 @@ if EMG_MODULES_AVAILABLE:
             window_size=250,
             overlap=0.5,
             sampling_rate=1000,
-            n_predictions=5,
+            n_predictions=2,
             label_encoder=label_encoder
         )
         # model_processor = ModelProcessor(
