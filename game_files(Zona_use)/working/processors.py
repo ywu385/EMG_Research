@@ -88,6 +88,64 @@ class NotchFilter(SignalProcessor):
             filtered = signal.filtfilt(b, a, filtered, axis=1)
         return filtered
 
+class RealTimeButterFilter(SignalProcessor):
+    def __init__(self, cutoff, sampling_rate, filter_type='bandpass', order=4):
+        """
+        Create a real-time Butterworth filter for EMG signal processing
+        Args:
+            cutoff: Cutoff frequency or frequencies (Hz)
+                - For lowpass/highpass: single value, e.g., 200
+                - For bandpass/bandstop: list/tuple of [low, high], e.g., [20, 200]
+            sampling_rate: Signal sampling frequency in Hz
+            filter_type: 'lowpass', 'highpass', 'bandpass', or 'bandstop'
+            order: Filter order (higher = steeper roll-off, but more ripple)
+        """
+        self.cutoff = cutoff
+        self.sampling_rate = sampling_rate
+        self.filter_type = filter_type
+        self.order = order
+        self.name = 'Real-Time Butterworth Filter'
+        
+        # Normalize the cutoff frequency
+        nyquist = 0.5 * sampling_rate
+        if isinstance(cutoff, (list, tuple)):
+            self.normalized_cutoff = [cf / nyquist for cf in cutoff]
+        else:
+            self.normalized_cutoff = cutoff / nyquist
+            
+        # Get filter coefficients
+        self.b, self.a = signal.butter(
+            order,
+            self.normalized_cutoff,
+            btype=filter_type,
+            analog=False
+        )
+        
+        # Initialize filter states (one per channel)
+        self.zi = None
+        
+    def initialize(self, data: np.ndarray) -> None:
+        """Initialize filter states based on channel count"""
+        n_channels = data.shape[0]
+        # Create initial filter states (zeroed)
+        self.zi = [signal.lfilter_zi(self.b, self.a) * 0 for _ in range(n_channels)]
+        
+    def process(self, data: np.ndarray) -> np.ndarray:
+        """Apply Butterworth filter to the signal in real-time"""
+        # Initialize filter states if needed
+        if self.zi is None or len(self.zi) != data.shape[0]:
+            self.initialize(data)
+            
+        # Create output array
+        filtered = np.zeros_like(data)
+        
+        # Process each channel separately, maintaining filter state
+        for i in range(data.shape[0]):
+            filtered[i], self.zi[i] = signal.lfilter(
+                self.b, self.a, data[i], zi=self.zi[i]
+            )
+            
+        return filtered
 
 class ButterFilter(SignalProcessor):
     def __init__(self, cutoff, sampling_rate, filter_type='bandpass', order=4):

@@ -126,7 +126,15 @@ def stream_emg_data(chunk_queue, use_bitalino=True, input_file=None):
         pipeline.add_processor(ZeroChannelRemover())
         pipeline.add_processor(NotchFilter([60], sampling_rate=1000)) 
         pipeline.add_processor(DCRemover())
-        pipeline.add_processor(AdaptiveMaxNormalizer())
+        emg_bandpass = RealTimeButterFilter(
+                            cutoff=[20, 450],  # Target the 20-450 Hz frequency range for EMG
+                            sampling_rate=1000,  # Assuming 1000 Hz sampling rate
+                            filter_type='bandpass',
+                            order=4  # 4th order provides good balance between sharpness and stability
+                        )
+        pipeline.add_processor(emg_bandpass)
+        # pipeline.add_processor(AdaptiveMaxNormalizer())
+        pipeline.add_processor(MaxNormalizer())
         streamer.add_pipeline(pipeline)
         
         # Stream the data
