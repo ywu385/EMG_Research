@@ -261,7 +261,11 @@ def main():
         'downward': 'down',
         'inward': 'left',
         'outward': 'right',
-        'rest':'rest'
+        'rest':'rest',
+        'Upward':'up',
+        'Downward':'down',
+        'Left':'left',
+        'Right':'right'
         # Add mappings for your specific model outputs
     }
     
