@@ -80,7 +80,7 @@ if EMG_MODULES_AVAILABLE:
         
         # Setup model processor
         model_processor = LGBMProcessor(
-            model=models,
+            models=models,
             window_size=250,
             overlap=0.5,
             sampling_rate=1000,
