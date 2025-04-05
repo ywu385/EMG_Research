@@ -46,8 +46,7 @@ if model_paths:
     # Load model
     with open(model_path, 'rb') as file:
         # model, label_encoder = pickle.load(file)
-        model = pickle.load(file)
-        models = model['models']
+        models = pickle.load(file)
     print("Model loaded at global level")
 else:
     print("No model files found")
