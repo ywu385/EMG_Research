@@ -28,15 +28,17 @@ emg_queue = multiprocessing.Queue()
 # List to keep track of recorded files
 recorded_files = []
 
-# Function to convert NPY to TXT
-def convert_npy_to_txt(input_file):
+# Function to convert NPY to TXT and delete the NPY file
+def convert_npy_to_txt(input_file, delete_npy=True):
     """
-    Convert a .npy file to a .txt file
+    Convert a .npy file to a .txt file and optionally delete the NPY file
     
     Parameters:
     -----------
     input_file : str
         Path to the .npy file
+    delete_npy : bool
+        Whether to delete the NPY file after conversion
     
     Returns:
     --------
@@ -76,6 +78,15 @@ def convert_npy_to_txt(input_file):
         np.savetxt(output_file, reshaped, fmt='%.6f', delimiter='\t')
     
     print(f"Saved to: {output_file}")
+    
+    # Delete the NPY file if requested
+    if delete_npy:
+        try:
+            os.remove(input_file)
+            print(f"Deleted NPY file: {input_file}")
+        except Exception as e:
+            print(f"Error deleting NPY file: {e}")
+    
     return output_file
 
 # IMPORTANT: Modified function to create and use the streamer inside the process
@@ -242,17 +253,18 @@ def main():
         duration = float(input("Enter recording duration in seconds for each gesture: "))
         if duration <= 0:
             raise ValueError("Duration must be positive")
+        name = str(input("Enter Name of participant: "))
         
         # Loop through each gesture
         for i, gesture in enumerate(gestures):
-            print(f"\n--- Preparing to record {gesture} (Rider {i+1}) ---")
+            print(f"\n--- Preparing to record {gesture} ({name}) ---")
             
             # Wait for user to be ready
             input(f"Press Enter when ready to record {gesture}...")
             
             # Generate filename with timestamp and gesture name
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"{output_dir}/{gesture}_{timestamp}.npy"
+            filename = f"{output_dir}/{name}_{timestamp}_{gesture}.npy"
             
             # Start recording this gesture
             record_gesture(emg_queue, duration, filename)
@@ -291,7 +303,7 @@ def main():
                 
                 # Generate filename with timestamp
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = f"{output_dir}/{gesture_name}_{timestamp}.npy"
+                filename = f"{output_dir}/{name}_{gesture_name}_{timestamp}.npy"
                 
                 # Start recording
                 record_gesture(emg_queue, duration, filename)
@@ -303,7 +315,7 @@ def main():
         else:
             print("Please enter 'y' or 'n'")
     
-    # Convert all recorded NPY files to TXT format
+    # Convert all recorded NPY files to TXT format and delete NPY files
     if recorded_files:
         print("\n" + "="*50)
         print("CONVERTING NPY FILES TO TXT FORMAT")
@@ -311,9 +323,9 @@ def main():
         
         for i, npy_file in enumerate(recorded_files):
             print(f"[{i+1}/{len(recorded_files)}] Converting {os.path.basename(npy_file)}")
-            txt_file = convert_npy_to_txt(npy_file)
+            txt_file = convert_npy_to_txt(npy_file, delete_npy=True)
         
-        print("\nAll files converted successfully!")
+        print("\nAll files converted successfully and NPY files deleted!")
     
     print("\nRecording session ended")
     
