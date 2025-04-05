@@ -111,10 +111,10 @@ def stream_emg_data(chunk_queue, use_bitalino=True, input_file=None):
             except Exception as e:
                 print(f"Error initializing BiTalino: {e}")
                 print("Falling back to text streamer")
-                streamer = TXTStreamer(input_file)
+                streamer = TXTStreamer(input_file, simple=False)
         else:
             print('Creating text streamer within process')
-            streamer = TXTStreamer(input_file)
+            streamer = TXTStreamer(input_file, simple=False)
         
         # Setup pipeline
         pipeline = EMGPipeline()
