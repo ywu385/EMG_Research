@@ -37,15 +37,16 @@ emg_queue = multiprocessing.Queue(maxsize=5)
 print("Initializing EMG components at global level...")
 #%%
 # Find the model path
-model_paths = glob.glob('./working_models/RF.pkl')
+# model_paths = glob.glob('./working_models/RF.pkl')
+model_paths = glob.glob('./working_models/lgb.pkl')
 if model_paths:
     model_path = model_paths[0]
     print(f"Found model: {model_path}")
     
     # Load model
     with open(model_path, 'rb') as file:
-        # model, label_encoder = pickle.load(file)
-        model = pickle.load(file)
+        model, label_encoder = pickle.load(file)
+        # model = pickle.load(file)
     print("Model loaded at global level")
 else:
     print("No model files found")
@@ -84,7 +85,7 @@ if EMG_MODULES_AVAILABLE:
             overlap=0.5,
             sampling_rate=1000,
             n_predictions=3,
-            # label_encoder=label_encoder
+            label_encoder=label_encoder
         )
         # model_processor = ModelProcessor(
         #     model = model,
