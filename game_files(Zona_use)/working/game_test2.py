@@ -9,6 +9,7 @@ import glob
 import atexit
 import sys
 import random
+from post_processing import BaggedRF
 
 # Import game classes
 from target_game import TargetGame
