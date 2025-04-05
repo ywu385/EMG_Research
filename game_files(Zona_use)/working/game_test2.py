@@ -83,7 +83,7 @@ if EMG_MODULES_AVAILABLE:
             overlap=0.5,
             sampling_rate=1000,
             n_predictions=3,
-            label_encoder=label_encoder
+            # label_encoder=label_encoder
         )
         # model_processor = ModelProcessor(
         #     model = model,
