@@ -118,7 +118,7 @@ def process_emg_data(model_processor, chunk_queue):
                 for w in windows:
                     prediction = model_processor.process(w)
                     i_metrics = intensity_processor.process(w)
-                    
+                    print(f'Prediction from model: {prediction}')
                     if i_metrics['rms_values'] is not None and len(i_metrics['rms_values']) > 0:
                         min_speed, max_speed = 0, 10  # Define min/max speed range
                         norm_rms = np.array(i_metrics['rms_values']).max() / i_metrics['max_rms_ever']
@@ -136,7 +136,7 @@ def process_emg_data(model_processor, chunk_queue):
                                 
                         # Add newest prediction
                         chunk_queue.put((prediction, intensity_value), block=False)
-                        print(f"Prediction {counter}: {prediction}, intensity={intensity_value:.2f}")
+                        print(f"Prediction from processor {counter}: {prediction}, intensity={intensity_value:.2f}")
                         counter += 1
                     
         except Exception as e:
