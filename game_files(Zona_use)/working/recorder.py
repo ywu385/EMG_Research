@@ -17,25 +17,13 @@ except ImportError as e:
     print(f"Error importing EMG modules: {e}")
     EMG_MODULES_AVAILABLE = False
 
-# Initialize BiTalino at the global scope - "Start the car"
-print('Loading Bitalino Device')
-mac_address = "/dev/tty.BITalino-3C-C2"
-device = BITalino(mac_address)
-device.battery(10)
-streamer = BitaStreamer(device)
-# streamer = TXTStreamer('./data/combined.txt')  # for testing
-
-pipeline = EMGPipeline()
-pipeline.add_processor(ZeroChannelRemover())
-pipeline.add_processor(NotchFilter([60], sampling_rate=1000))
-streamer.add_pipeline(pipeline)
+# Global variables for configuration
+USE_BITALINO = True
+INPUT_FILE = './data/combined.txt'  # Default file if not using BiTalino
+mac_address = "/dev/tty.BITalino-3C-C2"  # BITalino MAC address
 
 # Global queue for data transfer
 emg_queue = multiprocessing.Queue()
-
-# Global flags for control
-recording_flag = multiprocessing.Value('i', 0)  # 0 = not recording, 1 = recording
-stop_program = multiprocessing.Value('i', 0)    # Flag to stop the program
 
 # List to keep track of recorded files
 recorded_files = []
@@ -90,20 +78,60 @@ def convert_npy_to_txt(input_file):
     print(f"Saved to: {output_file}")
     return output_file
 
-# Function to stream processed data to queue - defined at global scope
-def output_queue(chunk_queue, streamer_obj):
+# IMPORTANT: Modified function to create and use the streamer inside the process
+def stream_emg_data(chunk_queue, use_bitalino=True, input_file=None):
+    """
+    Stream EMG data from either BiTalino or a text file.
+    This function creates its own streamer instance.
+    """
     try:
-        print("Starting data streaming process")
-        for chunk in streamer_obj.stream_processed():
+        # Create the streamer inside this process
+        if use_bitalino and EMG_MODULES_AVAILABLE:
+            print('Creating BiTalino streamer within process')
             try:
-                # Always put data in the queue
+                # Connect to device
+                device = BITalino(mac_address)
+                device.battery(10)
+                print("BiTalino device connected")
+                
+                # Setup streamer
+                streamer = BitaStreamer(device)
+                print("BiTalino streamer created")
+            except Exception as e:
+                print(f"Error initializing BiTalino: {e}")
+                print("Falling back to text streamer")
+                streamer = TXTStreamer(input_file)
+        else:
+            print('Creating text streamer within process')
+            streamer = TXTStreamer(input_file)
+        
+        # Setup pipeline
+        pipeline = EMGPipeline()
+        pipeline.add_processor(ZeroChannelRemover())
+        pipeline.add_processor(NotchFilter([60], sampling_rate=1000))
+        streamer.add_pipeline(pipeline)
+        
+        # Stream the data
+        print("Starting data streaming process")
+        for chunk in streamer.stream_processed():
+            try:
+                # Put data in the queue
                 chunk_queue.put((chunk), block=False)
             except Exception as e:
                 print(f"Error putting chunk in queue: {e}")
                 time.sleep(0.1)
+                
     except Exception as e:
         print(f"Stream processing error: {e}")
+    finally:
         print("Stream processing stopped.")
+        # Close device if it was created in this process
+        if use_bitalino and EMG_MODULES_AVAILABLE and 'device' in locals():
+            try:
+                device.close()
+                print("BiTalino device closed")
+            except:
+                print("Error closing BiTalino device")
 
 # Function to record data for a specific gesture
 def record_gesture(queue, duration, output_file):
@@ -190,21 +218,20 @@ def main():
     output_dir = "emg_recordings"
     os.makedirs(output_dir, exist_ok=True)
     
-    # Start the data streaming process using the globally defined streamer
-    # This is just "sitting in the car" - the car was already running
-    output_process = multiprocessing.Process(
-        target=output_queue, 
-        args=(emg_queue, streamer), 
+    # Create and start the streaming process - now it creates its own streamer
+    streamer_process = multiprocessing.Process(
+        target=stream_emg_data, 
+        args=(emg_queue, USE_BITALINO, INPUT_FILE),
         daemon=True
     )
-    output_process.start()
+    streamer_process.start()
     
     print("\n" + "="*50)
-    print("Car is already running (streamer was started globally)")
+    print("Starting EMG recording system")
     print("="*50 + "\n")
     
     # Wait a moment for streaming process to initialize
-    time.sleep(1)
+    time.sleep(2)  # Give it a bit more time to initialize
     
     # Pre-defined gestures to record
     gestures = ["Upward", "Downward", "Left", "Right"]
@@ -289,8 +316,13 @@ def main():
         print("\nAll files converted successfully!")
     
     print("\nRecording session ended")
-    print("Note: The BiTalino streamer remains initialized (car is still running)")
-    print("You can run this program again without reinitializing the device")
+    
+    # Clean up
+    if streamer_process.is_alive():
+        print("Terminating streamer process...")
+        streamer_process.terminate()
+        streamer_process.join(timeout=1.0)
+        print("Streamer process terminated")
 
 if __name__ == "__main__":
     # For Windows compatibility
