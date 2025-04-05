@@ -313,63 +313,150 @@ class LGBMProcessor(SignalProcessor):
         return np.array([
             Counter(col).most_common(1)[0][0] for col in zip(*all_preds)
         ])
-
-
-
+######################################################## OLD IMPLEMENTATION ######################################################################
+# class IntensityProcessor:
+#     """Processes EMG signal windows and calculates intensity based on extracted features"""
+#     def __init__(self, scaling_factor=1.5):
+#         self.max_rms = None
+#         self.scaling_factor = scaling_factor
+    
+#     def process(self, window: np.ndarray) -> dict:
+#         """
+#         Process EMG window and calculate intensity metrics
+        
+#         Args:
+#             window: EMG data array of shape (channels, samples)
+            
+#         Returns:
+#             Dictionary with intensity metrics
+#         """
+#         feature_values = []
+        
+#         # Extract features from each channel
+#         for channel in window:
+#             features = FeatureUtils.extract_features(channel)
+#             feature_values.append(features)
+        
+#         # Get RMS values from all channels
+#         rms_values = [features['rms'] for features in feature_values]
+#         current_max_rms = max(rms_values)
+        
+#         # Initialize max_rms if this is first window
+#         if self.max_rms is None:
+#             self.max_rms = current_max_rms * self.scaling_factor
+        
+#         # Update max RMS if we see a higher value
+#         if current_max_rms > self.max_rms:
+#             self.max_rms = current_max_rms
+        
+#         # Calculate average RMS and normalize
+#         avg_rms = np.mean(rms_values)
+#         # normalized_rms = avg_rms / self.max_rms
+        
+#         # Get MAV values from all channels
+#         # mav_values = [features['mav'] for features in feature_values]
+#         # avg_mav = np.mean(mav_values)
+        
+#         return {
+#             'feature_values': feature_values,  # All extracted features
+#             'rms_values': rms_values,          # RMS for each channel
+#             'max_rms_ever': self.max_rms,      # Historical maximum RMS
+#             # 'normalized_rms': normalized_rms,  # Normalized average RMS
+#             'avg_rms': avg_rms,                # Average RMS across channels
+#             # 'avg_mav': avg_mav,                # Average MAV across channels
+#             'max_channel': np.argmax(rms_values)  # Most active channel
+#         }
 
 class IntensityProcessor:
-    """Processes EMG signal windows and calculates intensity based on extracted features"""
-    def __init__(self, scaling_factor=1.5):
-        self.max_rms = None
+    """
+    Processes EMG signal windows and calculates intensity based on extracted features
+    with improved stability across channels
+    """
+    def __init__(self, scaling_factor=1.5, smoothing_factor=0.8):
+        self.max_rms_per_channel = None  # Track max RMS separately for each channel
+        self.current_active_channels = None  # Track which channels are active
+        self.smoothed_rms = None  # For smoothing RMS values over time
         self.scaling_factor = scaling_factor
-    
+        self.smoothing_factor = smoothing_factor  # Higher = more smoothing (0-1)
+        
     def process(self, window: np.ndarray) -> dict:
         """
-        Process EMG window and calculate intensity metrics
+        Process EMG window and calculate intensity metrics with channel tracking
         
         Args:
             window: EMG data array of shape (channels, samples)
-            
+        
         Returns:
             Dictionary with intensity metrics
         """
+        num_channels = len(window)
         feature_values = []
         
+        # Initialize channel tracking if this is the first window
+        if self.max_rms_per_channel is None:
+            self.max_rms_per_channel = np.zeros(num_channels)
+            self.smoothed_rms = np.zeros(num_channels)
+        
         # Extract features from each channel
-        for channel in window:
+        for channel_idx, channel in enumerate(window):
             features = FeatureUtils.extract_features(channel)
             feature_values.append(features)
         
         # Get RMS values from all channels
-        rms_values = [features['rms'] for features in feature_values]
-        current_max_rms = max(rms_values)
+        rms_values = np.array([features['rms'] for features in feature_values])
         
-        # Initialize max_rms if this is first window
-        if self.max_rms is None:
-            self.max_rms = current_max_rms * self.scaling_factor
+        # Apply temporal smoothing to RMS values
+        if self.smoothed_rms is not None:
+            self.smoothed_rms = (self.smoothing_factor * self.smoothed_rms + 
+                                (1 - self.smoothing_factor) * rms_values)
+        else:
+            self.smoothed_rms = rms_values.copy()
         
-        # Update max RMS if we see a higher value
-        if current_max_rms > self.max_rms:
-            self.max_rms = current_max_rms
+        # Update max RMS for each channel separately
+        for i, rms in enumerate(rms_values):
+            if rms > self.max_rms_per_channel[i]:
+                self.max_rms_per_channel[i] = rms * self.scaling_factor
         
-        # Calculate average RMS and normalize
-        avg_rms = np.mean(rms_values)
-        # normalized_rms = avg_rms / self.max_rms
+        # Find active channels (those with significant activity)
+        active_threshold = np.mean(rms_values) * 0.5  # Threshold for considering a channel active
+        active_channels = np.where(rms_values > active_threshold)[0]
         
-        # Get MAV values from all channels
-        # mav_values = [features['mav'] for features in feature_values]
-        # avg_mav = np.mean(mav_values)
+        # If no channels are active, use all channels
+        if len(active_channels) == 0:
+            active_channels = np.arange(num_channels)
+        
+        # Calculate metrics using only active channels
+        avg_rms = np.mean(rms_values[active_channels])
+        max_channel = np.argmax(rms_values)
+        
+        # Calculate normalized RMS for each channel (with respect to its own historical max)
+        normalized_rms_values = np.zeros_like(rms_values)
+        for i, rms in enumerate(rms_values):
+            if self.max_rms_per_channel[i] > 0:
+                normalized_rms_values[i] = rms / self.max_rms_per_channel[i]
+        
+        # Get overall normalized RMS (using active channels only)
+        if len(active_channels) > 0:
+            overall_normalized_rms = np.mean(normalized_rms_values[active_channels])
+        else:
+            overall_normalized_rms = 0
+            
+        # Get max RMS ever seen across all channels
+        max_rms_ever = np.max(self.max_rms_per_channel)
         
         return {
-            'feature_values': feature_values,  # All extracted features
-            'rms_values': rms_values,          # RMS for each channel
-            'max_rms_ever': self.max_rms,      # Historical maximum RMS
-            # 'normalized_rms': normalized_rms,  # Normalized average RMS
-            'avg_rms': avg_rms,                # Average RMS across channels
-            # 'avg_mav': avg_mav,                # Average MAV across channels
-            'max_channel': np.argmax(rms_values)  # Most active channel
+            'feature_values': feature_values,         # All extracted features
+            'rms_values': rms_values.tolist(),        # RMS for each channel
+            'smoothed_rms': self.smoothed_rms.tolist(), # Smoothed RMS values
+            'max_rms_per_channel': self.max_rms_per_channel.tolist(), # Max RMS per channel
+            'max_rms_ever': max_rms_ever,             # Max RMS ever seen across all channels
+            'avg_rms': avg_rms,                       # Average RMS across active channels
+            'normalized_rms_values': normalized_rms_values.tolist(), # Normalized RMS per channel
+            'overall_normalized_rms': overall_normalized_rms, # Overall normalized RMS
+            'max_channel': int(max_channel),          # Most active channel
+            'active_channels': active_channels.tolist() # List of currently active channels
         }
-    
+
 ######################################################## Wavelet Decomp ######################################################################
 
 import pywt
