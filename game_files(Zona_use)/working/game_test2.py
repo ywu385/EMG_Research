@@ -10,6 +10,8 @@ import atexit
 import sys
 import random
 from post_processing import BaggedRF
+from stream_processor_bit import *
+from processors import *
 
 # Import game classes
 from target_game import TargetGame
@@ -18,8 +20,8 @@ from spriralgame import GridSpiralChallenge
 #%%
 # Import your custom EMG modules
 try:
-    from stream_processor_bit import *
-    from processors import *
+    
+    
     from revolution_api.bitalino import *
     from post_processing import *
     
@@ -68,13 +70,27 @@ if EMG_MODULES_AVAILABLE:
         print("Created BITalino streamer at global level")
         
         # Setup pipeline
+        # pipeline = EMGPipeline()
+        # pipeline.add_processor(ZeroChannelRemover())
+        # pipeline.add_processor(NotchFilter([60], sampling_rate=1000))
+        # pipeline.add_processor(DCRemover())
+        # # bandpass = ButterFilter(cutoff=[20, 450], sampling_rate=1000, filter_type='bandpass', order=4)
+        # # pipeline.add_processor(bandpass)
+        # pipeline.add_processor(AdaptiveMaxNormalizer())
+        # streamer.add_pipeline(pipeline)
         pipeline = EMGPipeline()
         pipeline.add_processor(ZeroChannelRemover())
-        pipeline.add_processor(NotchFilter([60], sampling_rate=1000))
+        pipeline.add_processor(NotchFilter([60], sampling_rate=1000)) 
         pipeline.add_processor(DCRemover())
-        # bandpass = ButterFilter(cutoff=[20, 450], sampling_rate=1000, filter_type='bandpass', order=4)
-        # pipeline.add_processor(bandpass)
-        pipeline.add_processor(AdaptiveMaxNormalizer())
+        emg_bandpass = RealTimeButterFilter(
+                            cutoff=[20, 450],  # Target the 20-450 Hz frequency range for EMG
+                            sampling_rate=1000,  # Assuming 1000 Hz sampling rate
+                            filter_type='bandpass',
+                            order=4  # 4th order provides good balance between sharpness and stability
+                        )
+        pipeline.add_processor(emg_bandpass)
+        # pipeline.add_processor(AdaptiveMaxNormalizer())
+        pipeline.add_processor(MaxNormalizer())
         streamer.add_pipeline(pipeline)
         print("Pipeline added to streamer at global level")
         

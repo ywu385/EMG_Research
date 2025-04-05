@@ -60,11 +60,17 @@ if EMG_MODULES_AVAILABLE:
         # Setup pipeline
         pipeline = EMGPipeline()
         pipeline.add_processor(ZeroChannelRemover())
-        pipeline.add_processor(NotchFilter([60], sampling_rate=1000))
+        pipeline.add_processor(NotchFilter([60], sampling_rate=1000)) 
         pipeline.add_processor(DCRemover())
-        # bandpass = ButterFilter(cutoff=[20, 450], sampling_rate=1000, filter_type='bandpass', order=4)
-        # pipeline.add_processor(bandpass)
-        pipeline.add_processor(AdaptiveMaxNormalizer())
+        emg_bandpass = RealTimeButterFilter(
+                            cutoff=[20, 450],  # Target the 20-450 Hz frequency range for EMG
+                            sampling_rate=1000,  # Assuming 1000 Hz sampling rate
+                            filter_type='bandpass',
+                            order=4  # 4th order provides good balance between sharpness and stability
+                        )
+        pipeline.add_processor(emg_bandpass)
+        # pipeline.add_processor(AdaptiveMaxNormalizer())
+        pipeline.add_processor(MaxNormalizer())
         streamer.add_pipeline(pipeline)
         print("Pipeline added to streamer at global level")
         
