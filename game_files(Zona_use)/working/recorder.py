@@ -24,6 +24,7 @@ device = BITalino(mac_address)
 device.battery(10)
 streamer = BitaStreamer(device)
 # streamer = TXTStreamer('./data/combined.txt')
+
 pipeline = EMGPipeline()
 pipeline.add_processor(ZeroChannelRemover())
 pipeline.add_processor(NotchFilter([60], sampling_rate=1000))
