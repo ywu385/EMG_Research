@@ -124,20 +124,20 @@ def process_emg_data(model_processor, chunk_queue):
                         norm_rms = np.array(i_metrics['rms_values']).max() / i_metrics['max_rms_ever']
                         intensity_value = min_speed + (norm_rms * (max_speed - min_speed))
                 
-                # Only when model buffer has enough data
-                if prediction is not None:
-                    # Handle full queue by making space for new data
-                    if chunk_queue.full():
-                        try:
-                            # Remove oldest item to make space
-                            chunk_queue.get_nowait()
-                        except:
-                            pass  # Ignore any errors
-                            
-                    # Add newest prediction
-                    chunk_queue.put((prediction, intensity_value), block=False)
-                    print(f"Prediction {counter}: {prediction}, intensity={intensity_value:.2f}")
-                    counter += 1
+                    # Only when model buffer has enough data
+                    if prediction is not None:
+                        # Handle full queue by making space for new data
+                        if chunk_queue.full():
+                            try:
+                                # Remove oldest item to make space
+                                chunk_queue.get_nowait()
+                            except:
+                                pass  # Ignore any errors
+                                
+                        # Add newest prediction
+                        chunk_queue.put((prediction, intensity_value), block=False)
+                        print(f"Prediction {counter}: {prediction}, intensity={intensity_value:.2f}")
+                        counter += 1
                     
         except Exception as e:
             print(f"Error processing EMG data: {e}")
