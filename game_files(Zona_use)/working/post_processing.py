@@ -207,8 +207,9 @@ class WideModelProcessor(SignalProcessor):
         # Make prediction
         pred = self.model.predict(np.array(features).reshape(1, -1))[0]
 
-        pred_index = np.argmax(pred)
-        pred = self.label_encoder.inverse_transform([pred_index])[0]
+        if hasattr(self.label_encoder):
+            pred_index = np.argmax(pred)
+            pred = self.label_encoder.inverse_transform([pred_index])[0]
 
         # Add to prediction history
         self.prediction_history.append(pred)
