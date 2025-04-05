@@ -207,7 +207,7 @@ class WideModelProcessor(SignalProcessor):
         # Make prediction
         pred = self.model.predict(np.array(features).reshape(1, -1))[0]
 
-        if hasattr(self.label_encoder):
+        if self.label_encoder is not None:
             pred_index = np.argmax(pred)
             pred = self.label_encoder.inverse_transform([pred_index])[0]
 
