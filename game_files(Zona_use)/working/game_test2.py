@@ -84,7 +84,7 @@ if EMG_MODULES_AVAILABLE:
             window_size=250,
             overlap=0.5,
             sampling_rate=1000,
-            n_predictions=5,
+            n_predictions=3,
             # label_encoder=label_encoder
         )
         # model_processor = ModelProcessor(
@@ -133,23 +133,24 @@ def process_emg_data(model_processor, chunk_queue):
                     # metric_att = 'rms_values'
                     if i_metrics[metric_att] is not None and len(i_metrics[metric_att]) > 0:
                         min_speed, max_speed = 0, 10  # Define min/max speed range
+                        # norm_rms = np.array(i_metrics['rms_values']).max() / i_metrics['max_rms_ever']
                         norm_rms = i_metrics['overall_normalized_rms']
                         intensity_value = min_speed + (norm_rms * (max_speed - min_speed))
                 
-                # Only when model buffer has enough data
-                if prediction is not None:
-                    # Handle full queue by making space for new data
-                    if chunk_queue.full():
-                        try:
-                            # Remove oldest item to make space
-                            chunk_queue.get_nowait()
-                        except:
-                            pass  # Ignore any errors
-                            
-                    # Add newest prediction
-                    chunk_queue.put((prediction, intensity_value), block=False)
-                    print(f"Prediction {counter}: {prediction}, intensity={intensity_value:.2f}")
-                    counter += 1
+                    # Only when model buffer has enough data
+                    if prediction is not None:
+                        # Handle full queue by making space for new data
+                        if chunk_queue.full():
+                            try:
+                                # Remove oldest item to make space
+                                chunk_queue.get_nowait()
+                            except:
+                                pass  # Ignore any errors
+                                
+                        # Add newest prediction
+                        chunk_queue.put((prediction, intensity_value), block=False)
+                        print(f"Prediction {counter}: {prediction}, intensity={intensity_value:.2f}")
+                        counter += 1
                     
         except Exception as e:
             print(f"Error processing EMG data: {e}")

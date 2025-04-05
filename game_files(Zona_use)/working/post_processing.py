@@ -247,6 +247,13 @@ class LGBMProcessor(SignalProcessor):
         self.aggregate = aggregate
         self.n_predictions = n_predictions
         self.prediction_history = []
+        self.wavelet_extractors = [
+            WaveletFeatureExtractor(wavelet='sym4', levels=2),
+            WaveletFeatureExtractor(wavelet='sym5', levels=2),
+            WaveletFeatureExtractor(wavelet='db4', levels=2)
+            ]
+        self.basic_extractor = FeatureUtils()
+
     
     @staticmethod
     def load_model(model_path):
@@ -264,19 +271,27 @@ class LGBMProcessor(SignalProcessor):
             raise Exception(f"Error loading model: {str(e)}")
     
 
+    # def extract_features(self, window: np.ndarray) -> list:
+    #     """
+    #     Extract features from each channel in the window.
+    #     This function encapsulates the feature extraction logic so that you
+    #     can easily inspect or debug the features.
+    #     """
+    #     features = []
+    #     # Loop through each channel and extract features using different methods.
+    #     for channel in window:
+    #         features.extend(list(WaveletFeatureExtractor(wavelet='sym4', levels=2).extract_features(channel).values()))
+    #         features.extend(list(WaveletFeatureExtractor(wavelet='sym5',levels=2).extract_features(channel).values()))
+    #         features.extend(list(WaveletFeatureExtractor(wavelet='db4',levels=2).extract_features(channel).values()))
+    #         features.extend(list(FeatureUtils.extract_features(channel).values()))
+    #     return features
     def extract_features(self, window: np.ndarray) -> list:
-        """
-        Extract features from each channel in the window.
-        This function encapsulates the feature extraction logic so that you
-        can easily inspect or debug the features.
-        """
         features = []
-        # Loop through each channel and extract features using different methods.
         for channel in window:
-            features.extend(list(WaveletFeatureExtractor(wavelet='sym4', levels=2).extract_features(channel).values()))
-            features.extend(list(WaveletFeatureExtractor(wavelet='sym5',levels=2).extract_features(channel).values()))
-            features.extend(list(WaveletFeatureExtractor(wavelet='db4',levels=2).extract_features(channel).values()))
-            features.extend(list(FeatureUtils.extract_features(channel).values()))
+            # Use the pre-created extractors
+            for extractor in self.wavelet_extractors:
+                features.extend(list(extractor.extract_features(channel).values()))
+            features.extend(list(self.basic_extractor.extract_features(channel).values()))
         return features
 
     def process(self, window: np.ndarray, debug: bool = False) -> np.ndarray:
