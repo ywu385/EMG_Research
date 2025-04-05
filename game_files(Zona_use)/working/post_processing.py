@@ -428,3 +428,18 @@ class FeatureUtils:
             'wl': wl
         }
 
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import StratifiedKFold
+import numpy as np
+import pickle
+from collections import Counter
+
+class BaggedRF:
+    def __init__(self, models):
+        self.models = models
+
+    def predict(self, X):
+        all_preds = [model.predict(X) for model in self.models]
+        return np.array([
+            Counter(col).most_common(1)[0][0] for col in zip(*all_preds)
+        ])
