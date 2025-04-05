@@ -117,9 +117,16 @@ def stream_emg_data(chunk_queue, use_bitalino=True, input_file=None):
             streamer = TXTStreamer(input_file, simple=False)
         
         # Setup pipeline
+        # pipeline = EMGPipeline()
+        # pipeline.add_processor(ZeroChannelRemover())
+        # # pipeline.add_processor(NotchFilter([60], sampling_rate=1000))
+        # streamer.add_pipeline(pipeline)
+
         pipeline = EMGPipeline()
         pipeline.add_processor(ZeroChannelRemover())
-        # pipeline.add_processor(NotchFilter([60], sampling_rate=1000))
+        pipeline.add_processor(NotchFilter([60], sampling_rate=1000)) 
+        pipeline.add_processor(DCRemover())
+        pipeline.add_processor(AdaptiveMaxNormalizer())
         streamer.add_pipeline(pipeline)
         
         # Stream the data
