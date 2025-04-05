@@ -221,7 +221,100 @@ class WideModelProcessor(SignalProcessor):
             return mode(self.prediction_history)
         else:
             return pred
-   
+
+######################################################## LGBM ######################################################################
+class LGBMProcessor(SignalProcessor):
+    def __init__(self, models, window_size=250, overlap=0.5, sampling_rate=1000, 
+                 n_predictions=5, aggregate=True):
+        """
+        Args:
+            model: Loaded ML model or path to model file
+            window_size: Number of samples per window
+            overlap: Overlap ratio between windows (0 to 1)
+            sampling_rate: Sampling rate in Hz
+            n_predictions: Number of recent predictions to consider for mode
+            aggregate: Whether to return the mode of recent predictions
+        """
+        # Check if model is a string (file path)
+        if isinstance(models, str):
+            model_dict = self.load_model(models)
+            models = model_dict['models']
+            print("Model loaded via path")
+        
+        self.models = models
+        self.window_size = window_size
+        self.sampling_rate = sampling_rate
+        self.aggregate = aggregate
+        self.n_predictions = n_predictions
+        self.prediction_history = []
+    
+    @staticmethod
+    def load_model(model_path):
+        import os
+        import pickle
+        
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Model path {model_path} not found, check path again")
+        
+        try:
+            with open(model_path, 'rb') as file:
+                model = pickle.load(file)
+            return model
+        except Exception as e:
+            raise Exception(f"Error loading model: {str(e)}")
+    
+
+    def extract_features(self, window: np.ndarray) -> list:
+        """
+        Extract features from each channel in the window.
+        This function encapsulates the feature extraction logic so that you
+        can easily inspect or debug the features.
+        """
+        features = []
+        # Loop through each channel and extract features using different methods.
+        for channel in window:
+            features.extend(list(WaveletFeatureExtractor(wavelet='sym4', levels=2).extract_features(channel).values()))
+            features.extend(list(WaveletFeatureExtractor(wavelet='sym5',levels=2).extract_features(channel).values()))
+            features.extend(list(WaveletFeatureExtractor(wavelet='db4',levels=2).extract_features(channel).values()))
+            features.extend(list(FeatureUtils.extract_features(channel).values()))
+        return features
+
+    def process(self, window: np.ndarray, debug: bool = False) -> np.ndarray:
+        """
+        Process a single window of EMG data and return prediction with smoothing.
+        Optionally, print out the features for debugging if debug=True.
+        """
+        # Extract features
+        features = self.extract_features(window)
+        # Store features for later inspection if needed
+        self.last_features = features
+        
+        # Print features if in debug mode
+        if debug:
+            print("Extracted features:", features)
+        
+        # Make prediction
+        pred = self.predict_bagged(np.array(features).reshape(1, -1))[0]
+
+        # Add to prediction history
+        self.prediction_history.append(pred)
+        if len(self.prediction_history) > self.n_predictions:
+            self.prediction_history.pop(0)
+        
+        # Return individual prediction or the mode of recent predictions
+        if self.aggregate and self.prediction_history:
+            return mode(self.prediction_history)
+        else:
+            return pred
+        
+    def predict_bagged(self, X):
+        models = self.models
+        all_preds = [model.predict(X) for model in models]
+        return np.array([
+            Counter(col).most_common(1)[0][0] for col in zip(*all_preds)
+        ])
+
+
 
 
 class IntensityProcessor:
