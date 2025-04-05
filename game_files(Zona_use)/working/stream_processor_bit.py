@@ -103,7 +103,7 @@ class BitaStreamer:
 
 
 class TXTStreamer:
-    def __init__(self, filepath: str, sampling_rate: int = 1000):
+    def __init__(self, filepath: str, sampling_rate: int = 1000, simple=True):
         """
         Initialize the EMG streamer
         
@@ -113,7 +113,10 @@ class TXTStreamer:
         """
         self.filepath = filepath
         self.sampling_rate = sampling_rate
-        self.data = self._load_data()
+        if simple:
+            self.data = self._load_simple_data()
+        else:
+            self.data = self._load_data()
         self.processor = EMGPipeline() 
         self.name = self.process_name(filepath)
 
@@ -128,6 +131,29 @@ class TXTStreamer:
     def process_name(file_path):
         """Extract the base filename without extension"""
         return os.path.splitext(os.path.basename(file_path))[0]
+    
+    def _load_simple_data(self) -> np.ndarray:
+        """
+        Load and parse a simple text file with space-separated values.
+        Each line represents one sample, and each column represents one channel.
+        
+        Returns:
+            np.ndarray: Array of shape (n_samples, n_channels) containing the EMG data
+        """
+        data_lines = []
+        
+        try:
+            with open(self.filepath, 'r') as f:
+                for line in f:
+                    # Strip whitespace and split by spaces
+                    values = [float(x) for x in line.strip().split()]
+                    if values:  # Only add non-empty lines
+                        data_lines.append(values)
+        except Exception as e:
+            print(f"Error loading file {self.filepath}: {e}")
+            return np.array([])
+            
+        return np.array(data_lines)
         
     def _load_data(self) -> np.ndarray:
         """Load and parse the EMG data file"""
