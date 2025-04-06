@@ -20,10 +20,12 @@ def main():
     label_dict = {}
     for f in labeled_files:
         print(f'Converting {f}')
-        # pipeline = EMGPipeline()
-        # pipeline.add_processor(NotchFilter([60], sampling_rate=1000))
-        # pipeline.add_processor(DCRemover())
+        pipeline = EMGPipeline()
+        pipeline.add_processor(NotchFilter([60], sampling_rate=1000))
+        pipeline.add_processor(DCRemover())
+        pipeline.add_processor(MaxNormalizer)
         # pipeline.add_processor(AdaptiveMaxNormalizer())
+        
         streamer = TXTStreamer(f)
         # streamer.add_pipeline(pipeline)
         all_data = streamer.process_all()
