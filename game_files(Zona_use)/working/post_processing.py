@@ -322,6 +322,19 @@ class LGBMProcessor(SignalProcessor):
         else:
             return pred
         
+    def predict_bagged(self, X):
+        models = self.models
+        model_predictions = [model.predict(X) for model in models]
+        print(f"Individual model predictions: {model_predictions}")
+        
+        preds = np.array(model_predictions).T
+        print(f"Transposed predictions shape: {preds.shape}")
+        
+        result = np.array([Counter(row).most_common(1)[0][0] for row in preds])
+        print(f"Final aggregated prediction: {result}")
+        
+        return result
+        
     # def predict_bagged(self, X):
     #     models = self.models
     #     all_preds = [model.predict(X) for model in models]
@@ -329,26 +342,26 @@ class LGBMProcessor(SignalProcessor):
     #         Counter(col).most_common(1)[0][0] for col in zip(*all_preds)
     #     ])
     
-    def predict_bagged(self, X):
-        models = self.models
-        all_preds = [model.predict(X) for model in models]
+    # def predict_bagged(self, X):
+    #     models = self.models
+    #     all_preds = [model.predict(X) for model in models]
         
-        # Initialize latest_probabilities attribute
-        self.latest_probabilities = None
+    #     # Initialize latest_probabilities attribute
+    #     self.latest_probabilities = None
         
-        # Try to get probabilities if available
-        try:
-            if hasattr(models[0], 'predict_proba'):
-                # Average probabilities from all models
-                all_probs = [model.predict_proba(X)[0] for model in models]
-                self.latest_probabilities = np.mean(all_probs, axis=0)
-        except Exception as e:
-            # Silently fail if probabilities aren't available
-            pass
+    #     # Try to get probabilities if available
+    #     try:
+    #         if hasattr(models[0], 'predict_proba'):
+    #             # Average probabilities from all models
+    #             all_probs = [model.predict_proba(X)[0] for model in models]
+    #             self.latest_probabilities = np.mean(all_probs, axis=0)
+    #     except Exception as e:
+    #         # Silently fail if probabilities aren't available
+    #         pass
         
-        return np.array([
-            Counter(col).most_common(1)[0][0] for col in zip(*all_preds)
-        ])
+    #     return np.array([
+    #         Counter(col).most_common(1)[0][0] for col in zip(*all_preds)
+    #     ])
     
     def process_with_metadata(self, window: np.ndarray, debug: bool = False) -> dict:
         """

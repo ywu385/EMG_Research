@@ -1,3 +1,4 @@
+#%%
 from lightgbm import LGBMClassifier
 from sklearn.model_selection import StratifiedKFold
 import numpy as np
@@ -15,7 +16,7 @@ import multiprocessing
 import traceback
 import glob
 
-
+BITALINO = True  # flag for using txt
 try:
     from revolution_api.bitalino import *
     EMG_MODULES_AVAILABLE = True
@@ -27,7 +28,7 @@ except ImportError as e:
 
 emg_queue = multiprocessing.Queue(maxsize=5)
 
-
+#%%
 ########################################################  LOAD MODEL HERE ######################################################################
 model_paths = glob.glob('./working_models/LGBM.pkl')
 # model_paths = glob.glob('./working_models/lgb.pkl')
@@ -43,19 +44,24 @@ if model_paths:
 else:
     print("No model files found")
     model = None
-
+#%%
 ######################################################## Bitalino Features ######################################################################
 mac_address = "/dev/tty.BITalino-3C-C2"  # Update with your device's address
 if EMG_MODULES_AVAILABLE:
     try:
+        if BITALINO:
         # Setup device
-        device = BITalino(mac_address)
-        device.battery(10)
-        print("BITalino connected at global level")
-        
-        # Setup streamer
-        streamer = BitaStreamer(device)
-        print("Created BITalino streamer at global level")
+            device = BITalino(mac_address)
+            device.battery(10)
+            print("BITalino connected at global level")
+            
+            # Setup streamer
+            streamer = BitaStreamer(device)
+            print("Created BITalino streamer at global level")
+        else:
+            import glob
+            files = glob.glob('./data/zona*')
+            streamer = TXTStreamer(filepath = files[0])
         
         # Setup pipeline
         pipeline = EMGPipeline()
@@ -105,7 +111,7 @@ if EMG_MODULES_AVAILABLE:
         emg_initialized = False
 else:
     emg_initialized = False
-
+#%%
 # Function to process EMG data and put into queue
 def process_emg_data(model_processor, chunk_queue):
     counter = 0
@@ -122,7 +128,7 @@ def process_emg_data(model_processor, chunk_queue):
                 prediction = None
                 
                 for w in windows:
-                    prediction = model_processor.process_with_metadata(w)
+                    prediction = model_processor.process(w)
                     i_metrics = intensity_processor.process(w)
                     print(f'Prediction from model: {prediction}')
                     if i_metrics['rms_values'] is not None and len(i_metrics['rms_values']) > 0:
@@ -182,14 +188,14 @@ def main():
                 # Print formatted prediction information
                 print("\nPrediction Details:")
                 print(f"  → Prediction: {prediction}")
-                print(f"  → Confidence: {prediction['confidence']:.2f}")
+                # print(f"  → Confidence: {prediction['confidence']:.2f}")
                 print(f"  → Intensity: {intensity:.2f}")
                 
-                # If there are probabilities for each class, print them
-                if 'probabilities' in prediction:
-                    print("  → Class Probabilities:")
-                    for class_name, prob in prediction['probabilities'].items():
-                        print(f"     - {class_name}: {prob:.4f}")
+                # # If there are probabilities for each class, print them
+                # if 'probabilities' in prediction:
+                #     print("  → Class Probabilities:")
+                #     for class_name, prob in prediction['probabilities'].items():
+                #         print(f"     - {class_name}: {prob:.4f}")
                 
                 print("-" * 50)
                 
