@@ -82,13 +82,13 @@ if EMG_MODULES_AVAILABLE:
         pipeline.add_processor(ZeroChannelRemover())
         pipeline.add_processor(NotchFilter([60], sampling_rate=1000)) 
         pipeline.add_processor(DCRemover())
-        emg_bandpass = RealTimeButterFilter(
-                            cutoff=[20, 450],  # Target the 20-450 Hz frequency range for EMG
-                            sampling_rate=1000,  # Assuming 1000 Hz sampling rate
-                            filter_type='bandpass',
-                            order=4  # 4th order provides good balance between sharpness and stability
-                        )
-        pipeline.add_processor(emg_bandpass)
+        # emg_bandpass = RealTimeButterFilter(
+        #                     cutoff=[20, 450],  # Target the 20-450 Hz frequency range for EMG
+        #                     sampling_rate=1000,  # Assuming 1000 Hz sampling rate
+        #                     filter_type='bandpass',
+        #                     order=4  # 4th order provides good balance between sharpness and stability
+        #                 )
+        # pipeline.add_processor(emg_bandpass)
         # pipeline.add_processor(AdaptiveMaxNormalizer())
         pipeline.add_processor(MaxNormalizer())
         streamer.add_pipeline(pipeline)
@@ -100,7 +100,7 @@ if EMG_MODULES_AVAILABLE:
             window_size=250,
             overlap=0.5,
             sampling_rate=1000,
-            n_predictions=3,
+            n_predictions=5,
             # label_encoder=label_encoder
         )
         # model_processor = ModelProcessor(
@@ -144,6 +144,7 @@ def process_emg_data(model_processor, chunk_queue):
                 for w in windows:
                     prediction = model_processor.process(w)
                     i_metrics = intensity_processor.process(w)
+                    print(f'Model output prediction: {prediction}')
                     
                     metric_att = 'smoothed_rms'
                     # metric_att = 'rms_values'
@@ -156,6 +157,13 @@ def process_emg_data(model_processor, chunk_queue):
                     # Only when model buffer has enough data
                     if prediction is not None:
                         # Handle full queue by making space for new data
+                        # Print raw prediction probabilities if available
+                        if hasattr(model_processor, 'latest_probabilities') and model_processor.latest_probabilities is not None:
+                            print(f"Raw probabilities: {model_processor.latest_probabilities}")
+                        # Print the actual prediction
+                        print(f"Final prediction: {prediction}")
+
+
                         if chunk_queue.full():
                             try:
                                 # Remove oldest item to make space

@@ -322,9 +322,30 @@ class LGBMProcessor(SignalProcessor):
         else:
             return pred
         
+    # def predict_bagged(self, X):
+    #     models = self.models
+    #     all_preds = [model.predict(X) for model in models]
+    #     return np.array([
+    #         Counter(col).most_common(1)[0][0] for col in zip(*all_preds)
+    #     ])
+    
     def predict_bagged(self, X):
         models = self.models
         all_preds = [model.predict(X) for model in models]
+        
+        # Initialize latest_probabilities attribute
+        self.latest_probabilities = None
+        
+        # Try to get probabilities if available
+        try:
+            if hasattr(models[0], 'predict_proba'):
+                # Average probabilities from all models
+                all_probs = [model.predict_proba(X)[0] for model in models]
+                self.latest_probabilities = np.mean(all_probs, axis=0)
+        except Exception as e:
+            # Silently fail if probabilities aren't available
+            pass
+        
         return np.array([
             Counter(col).most_common(1)[0][0] for col in zip(*all_preds)
         ])
