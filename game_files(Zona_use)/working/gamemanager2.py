@@ -44,7 +44,7 @@ class GameManager:
         
         # Speed settings
         self.base_keyboard_speed = 5      # Speed for keyboard controls
-        self.base_emg_speed = 0.1         # Base speed for EMG
+        self.base_emg_speed = 0.5         # Base speed for EMG
         
         # EMG control variables
         self.latest_prediction = "rest"
