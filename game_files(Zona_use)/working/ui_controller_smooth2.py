@@ -268,13 +268,27 @@ def main():
         screen.blit(text_surface, text_rect)
 
         # Apply movement based on prediction and smoothed intensity
-        if latest_prediction == "outward":
+        # if latest_prediction == "outward":
+        #     selector_x -= scroll_speed  # Move left
+        # if latest_prediction == "inward":
+        #     selector_x += scroll_speed  # Move right
+        # if latest_prediction == "upward":
+        #     selector_y -= scroll_speed  # Move up
+        # if latest_prediction == "0":
+        #     selector_y += scroll_speed
+        # if latest_prediction == "1":
+        #     selector_y += 0
+        # if latest_prediction == "2":
+        #     selector_y -= scroll_speed 
+
+
+        if latest_prediction == "right":
             selector_x -= scroll_speed  # Move left
-        if latest_prediction == "inward":
+        if latest_prediction == "left":
             selector_x += scroll_speed  # Move right
         if latest_prediction == "upward":
             selector_y -= scroll_speed  # Move up
-        if latest_prediction == "0":
+        if latest_prediction == "downward":
             selector_y += scroll_speed
         if latest_prediction == "1":
             selector_y += 0
