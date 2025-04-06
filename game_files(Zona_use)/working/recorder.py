@@ -124,8 +124,8 @@ def stream_emg_data(chunk_queue, use_bitalino=True, input_file=None):
 
         pipeline = EMGPipeline()
         pipeline.add_processor(ZeroChannelRemover())
-        pipeline.add_processor(NotchFilter([60], sampling_rate=1000)) 
-        pipeline.add_processor(DCRemover())
+        # pipeline.add_processor(NotchFilter([60], sampling_rate=1000)) 
+        # pipeline.add_processor(DCRemover())
         # emg_bandpass = RealTimeButterFilter(
         #                     cutoff=[20, 450],  # Target the 20-450 Hz frequency range for EMG
         #                     sampling_rate=1000,  # Assuming 1000 Hz sampling rate
@@ -134,7 +134,7 @@ def stream_emg_data(chunk_queue, use_bitalino=True, input_file=None):
         #                 )
         # pipeline.add_processor(emg_bandpass)
         # pipeline.add_processor(AdaptiveMaxNormalizer())
-        pipeline.add_processor(MaxNormalizer())
+        # pipeline.add_processor(MaxNormalizer())
         streamer.add_pipeline(pipeline)
         
         # Stream the data
@@ -260,7 +260,7 @@ def main():
     time.sleep(2)  # Give it a bit more time to initialize
     
     # Pre-defined gestures to record
-    gestures = ["Upward", "Downward", "Left", "Right"]
+    gestures = ["upward", "downward", "left", "right"]
     
     # Get recording parameters
     try:
