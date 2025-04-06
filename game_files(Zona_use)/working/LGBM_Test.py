@@ -122,7 +122,7 @@ def process_emg_data(model_processor, chunk_queue):
                 prediction = None
                 
                 for w in windows:
-                    prediction = model_processor.process(w)
+                    prediction = model_processor.process_with_metadata(w)
                     i_metrics = intensity_processor.process(w)
                     print(f'Prediction from model: {prediction}')
                     if i_metrics['rms_values'] is not None and len(i_metrics['rms_values']) > 0:
@@ -181,7 +181,7 @@ def main():
                 
                 # Print formatted prediction information
                 print("\nPrediction Details:")
-                print(f"  → Class: {prediction['class']}")
+                print(f"  → Prediction: {prediction}")
                 print(f"  → Confidence: {prediction['confidence']:.2f}")
                 print(f"  → Intensity: {intensity:.2f}")
                 

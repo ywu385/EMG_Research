@@ -349,6 +349,49 @@ class LGBMProcessor(SignalProcessor):
         return np.array([
             Counter(col).most_common(1)[0][0] for col in zip(*all_preds)
         ])
+    
+    def process_with_metadata(self, window: np.ndarray, debug: bool = False) -> dict:
+        """
+        Process a window and return a rich prediction object with metadata.
+        """
+        # Extract features
+        features = self.extract_features(window)
+        self.last_features = features
+        
+        if debug:
+            print("Extracted features:", features)
+        
+        # Make prediction using your bagged prediction method
+        X = np.array(features).reshape(1, -1)
+        pred = self.predict_bagged(X)[0]
+        
+        # Add to prediction history (keep this consistent with your original method)
+        self.prediction_history.append(pred)
+        if len(self.prediction_history) > self.n_predictions:
+            self.prediction_history.pop(0)
+        
+        # If aggregation is enabled, get the most common prediction
+        if self.aggregate and self.prediction_history:
+            final_prediction = mode(self.prediction_history)
+        else:
+            final_prediction = pred
+        
+        # Create result dictionary with all metadata
+        result = {
+            'label': final_prediction,
+            'raw_prediction': pred,
+            'prediction_history': self.prediction_history.copy(),
+            'confidence': 0.0,
+            'probabilities': {}
+        }
+        
+        # Add probabilities if available
+        if hasattr(self, 'latest_probabilities') and self.latest_probabilities is not None:
+            classes = [str(i) for i in range(len(self.latest_probabilities))]
+            result['probabilities'] = {c: p for c, p in zip(classes, self.latest_probabilities)}
+            result['confidence'] = max(self.latest_probabilities)
+        
+        return result
 ######################################################## OLD IMPLEMENTATION ######################################################################
 # class IntensityProcessor:
 #     """Processes EMG signal windows and calculates intensity based on extracted features"""
