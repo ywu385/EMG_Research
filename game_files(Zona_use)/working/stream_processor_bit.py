@@ -35,7 +35,7 @@ class EMGPipeline:
         return result
     
 class BitaStreamer:
-    def __init__(self, device, sampling_rate=1000, acqChannels=[0, 1, 2, 3, 4, 5], nSamples=10):
+    def __init__(self, device, sampling_rate=1000, acqChannels=[0, 1, 2, 3], nSamples=10):
         """
         Device is preconfigured after Bitalino is instantiated.
         (e.g. device = BITalino())
