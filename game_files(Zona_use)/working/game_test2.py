@@ -309,10 +309,10 @@ def main():
         'rest':'rest',
         'Upward':'up',
         'Downward':'down',
-        'Left':'left',
-        'Right':'right',
-        # 'left':'right',
-        # 'right':'left'
+        'Left':'right',
+        'Right':'left',
+        'left':'right',
+        'right':'left'
         # Add mappings for your specific model outputs
     }
     
