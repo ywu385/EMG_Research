@@ -188,26 +188,26 @@ def process_emg_data(model_processor, chunk_queue):
                     print(f'Model output prediction: {prediction}')
                     
                     metric_att = 'smoothed_rms'
-                    # metric_att = 'rms_values'
-                    # if i_metrics[metric_att] is not None and len(i_metrics[metric_att]) > 0:
-                    #     min_speed, max_speed = 0, 5  # Define min/max speed range
-                    #     # norm_rms = np.array(i_metrics['rms_values']).max() / i_metrics['max_rms_ever']
-                    #     norm_rms = i_metrics['overall_normalized_rms']
-                    #     intensity_value = min_speed + (norm_rms * (max_speed - min_speed))
-        ########################################################  New Intensity limit ######################################################################
+                    metric_att = 'rms_values'
                     if i_metrics[metric_att] is not None and len(i_metrics[metric_att]) > 0:
-                        min_speed, max_speed = 0, 5  # Define min/max speed range
+                        min_speed, max_speed = 0, 3  # Define min/max speed range
+                        # norm_rms = np.array(i_metrics['rms_values']).max() / i_metrics['max_rms_ever']
                         norm_rms = i_metrics['overall_normalized_rms']
+                        intensity_value = min_speed + (norm_rms * (max_speed - min_speed))
+        ########################################################  New Intensity limit ######################################################################
+                    # if i_metrics[metric_att] is not None and len(i_metrics[metric_att]) > 0:
+                    #     min_speed, max_speed = 0, 3  # Define min/max speed range
+                    #     norm_rms = i_metrics['overall_normalized_rms']
                         
-                        # Calculate raw target intensity
-                        raw_intensity = min_speed + (norm_rms * (max_speed - min_speed))
+                    #     # Calculate raw target intensity
+                    #     raw_intensity = min_speed + (norm_rms * (max_speed - min_speed))
                         
-                        # Apply ramp factor for gradual increase
-                        # Move only part of the way toward target
-                        current_intensity += (raw_intensity - current_intensity) * ramp_factor
+                    #     # Apply ramp factor for gradual increase
+                    #     # Move only part of the way toward target
+                    #     current_intensity += (raw_intensity - current_intensity) * ramp_factor
                         
-                        # Apply the cap (maximum limit)
-                        intensity_value = min(current_intensity, max_intensity_limit)
+                    #     # Apply the cap (maximum limit)
+                    #     intensity_value = min(current_intensity, max_intensity_limit)
                 ########################################################  New Intensity Limit (Above) ######################################################################
                     # Only when model buffer has enough data
                     if prediction is not None:
@@ -302,8 +302,8 @@ def main():
     # Mapping of EMG predictions to game directions
     # Customize based on your model's output classes
     prediction_mapping = {
-        'upward': 'up',
-        'downward': 'down',
+        'upward': 'down',
+        'downward': 'up',
         'inward': 'left',
         'outward': 'right',
         'rest':'rest',
