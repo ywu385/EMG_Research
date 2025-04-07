@@ -26,6 +26,7 @@ if len(sys.argv) > 1:
         model_flag = 'model1'
     elif '--model2' in sys.argv:
         model_flag = 'model2'
+    
 
 print(f'Loading models and processors associated with {model_flag}')
 
@@ -165,8 +166,11 @@ def process_emg_data(model_processor, chunk_queue):
     print("Starting to process EMG data...")
     
      # Add this rate limiting variable 
-    last_intensity = 0
-    max_change_rate = 0.5  # Adjust this value to control the ramp speed (lower = more gradual)
+    current_intensity = 0
+    # How quickly intensity can increase (smaller = more gradual)
+    ramp_factor = 0.1
+    # Maximum intensity allowed (cap)
+    max_intensity_limit = 3.5  # Adjust this value to control the ramp speed (lower = more gradual)
 
     while True:  # This outer loop is crucial for reconnection
         try:
@@ -193,22 +197,17 @@ def process_emg_data(model_processor, chunk_queue):
         ########################################################  New Intensity limit ######################################################################
                     if i_metrics[metric_att] is not None and len(i_metrics[metric_att]) > 0:
                         min_speed, max_speed = 0, 5  # Define min/max speed range
-                        # norm_rms = np.array(i_metrics['rms_values']).max() / i_metrics['max_rms_ever']
                         norm_rms = i_metrics['overall_normalized_rms']
                         
-                        # Calculate target intensity
-                        target_intensity = min_speed + (norm_rms * (max_speed - min_speed))
+                        # Calculate raw target intensity
+                        raw_intensity = min_speed + (norm_rms * (max_speed - min_speed))
                         
-                        # Apply rate limiting for more gradual changes
-                        change = target_intensity - last_intensity
-                        if abs(change) > max_change_rate:
-                            change = max_change_rate * (1 if change > 0 else -1)
+                        # Apply ramp factor for gradual increase
+                        # Move only part of the way toward target
+                        current_intensity += (raw_intensity - current_intensity) * ramp_factor
                         
-                        # Apply the limited change
-                        intensity_value = last_intensity + change
-                        
-                        # Store for next iteration
-                        last_intensity = intensity_value
+                        # Apply the cap (maximum limit)
+                        intensity_value = min(current_intensity, max_intensity_limit)
                 ########################################################  New Intensity Limit (Above) ######################################################################
                     # Only when model buffer has enough data
                     if prediction is not None:
