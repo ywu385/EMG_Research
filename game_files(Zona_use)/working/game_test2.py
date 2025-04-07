@@ -40,7 +40,7 @@ emg_queue = multiprocessing.Queue(maxsize=5)
 print("Initializing EMG components at global level...")
 #%%
 # Find the model path
-model_paths = glob.glob('./working_models/LGBM_simple.pkl')
+model_paths = glob.glob('./working_models/LGBM.pkl')
 # model_paths = glob.glob('./working_models/lgb.pkl')
 if model_paths:
     model_path = model_paths[0]
@@ -89,13 +89,13 @@ if EMG_MODULES_AVAILABLE:
         pipeline.add_processor(ZeroChannelRemover())
         pipeline.add_processor(NotchFilter([60], sampling_rate=1000)) 
         pipeline.add_processor(DCRemover())
-        # emg_bandpass = RealTimeButterFilter(
-        #                     cutoff=[20, 450],  # Target the 20-450 Hz frequency range for EMG
-        #                     sampling_rate=1000,  # Assuming 1000 Hz sampling rate
-        #                     filter_type='bandpass',
-        #                     order=4  # 4th order provides good balance between sharpness and stability
-        #                 )
-        # pipeline.add_processor(emg_bandpass)
+        emg_bandpass = RealTimeButterFilter(
+                            cutoff=[20, 450],  # Target the 20-450 Hz frequency range for EMG
+                            sampling_rate=1000,  # Assuming 1000 Hz sampling rate
+                            filter_type='bandpass',
+                            order=4  # 4th order provides good balance between sharpness and stability
+                        )
+        pipeline.add_processor(emg_bandpass)
         # pipeline.add_processor(AdaptiveMaxNormalizer())
         # pipeline.add_processor(MaxNormalizer())
         streamer.add_pipeline(pipeline)
@@ -108,6 +108,7 @@ if EMG_MODULES_AVAILABLE:
             overlap=0.5,
             sampling_rate=1000,
             n_predictions=5,
+            wavelets  = ['sym5']
             # label_encoder=label_encoder
         )
         # model_processor = ModelProcessor(

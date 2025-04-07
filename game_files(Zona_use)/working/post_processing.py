@@ -232,7 +232,7 @@ class WideModelProcessor(SignalProcessor):
 
 class LGBMProcessor(SignalProcessor):
     def __init__(self, models, window_size=250, overlap=0.5, sampling_rate=1000, 
-                 n_predictions=5, aggregate=True, debug=False):
+                 n_predictions=5, aggregate=True, debug=False, wavelets = []):
         """
         Args:
             models: Trained LGBM models list for ensemble prediction
@@ -251,17 +251,24 @@ class LGBMProcessor(SignalProcessor):
         self.prediction_history = []
         self.debug = debug
         self.latest_probabilities = None
+        self.wavelets = wavelets
         
         # Feature extractors - matching training pipeline
         self.feature_extractor = FeatureUtils()
+        # Initialize wavelet extractors if needed
+        self.wavelet_extractors = {}
+        for wavelet in self.wavelets:
+            self.wavelet_extractors[wavelet] = WaveletFeatureExtractor(wavelet=wavelet, levels=2)
         
         # Get expected feature order from first model (if possible)
         self.feature_names = self._get_feature_names()
         
         if self.debug:
             print(f"Initialized LGBMProcessor with {len(self.models)} models")
+            print(f"Using wavelets: {self.wavelets}")
             if self.feature_names:
                 print(f"Expecting {len(self.feature_names)} features in order")
+        
         
     def _get_feature_names(self):
         """Try to get feature names from first model if available"""
@@ -271,7 +278,7 @@ class LGBMProcessor(SignalProcessor):
         except:
             pass
         return None
-        
+    
     def extract_features(self, window):
         """
         Extract features from a window of EMG data using exact column naming from training
@@ -288,22 +295,37 @@ class LGBMProcessor(SignalProcessor):
         if self.debug:
             print(f"Extracting features from window with {num_channels} channels, shape: {window.shape}")
         
-        # Define feature types in the exact order used in training
-        feature_types = ['rms', 'variance', 'mav', 'ssc', 'zcr', 'wl']
-        
         # Build feature dictionary with EXACT naming convention from training
         features_dict = {}
         
+        # First process with different wavelets (in the same order as dataset preparation)
+        for wavelet in self.wavelets:
+            if self.debug:
+                print(f"Extracting wavelet features with {wavelet}")
+            
+            wavelet_extractor = self.wavelet_extractors[wavelet]
+            
+            for channel_idx in range(num_channels):
+                channel_data = window[channel_idx]
+                
+                # Extract wavelet features for this channel
+                wavelet_features = wavelet_extractor.extract_features(channel_data)
+                
+                # Use the naming format from your training data with wavelet suffix
+                for feat_name, value in wavelet_features.items():
+                    col_name = f"{channel_idx+1}_{feat_name}_{wavelet}"
+                    features_dict[col_name] = value
+        
+        # Then process basic features (last in extraction order)
         for channel_idx in range(num_channels):
             channel_data = window[channel_idx]
             
-            # Extract features for this channel
+            # Extract basic features for this channel
             channel_features = self.feature_extractor.extract_features(channel_data)
             
             # Use exact naming format from your training data
-            # Format is "{channel_number}_{feature_type}" without "ch" prefix
             for feat_type, value in channel_features.items():
-                col_name = f"{channel_idx+1}_{feat_type}"  # Changed from "ch{channel_idx+1}_"
+                col_name = f"{channel_idx+1}_{feat_type}"
                 features_dict[col_name] = value
                 
         if self.debug:
@@ -329,6 +351,64 @@ class LGBMProcessor(SignalProcessor):
         else:
             # Without feature names, return dictionary and hope order is preserved
             return list(features_dict.values())
+        ######################################################## Old implementation of extract_features ######################################################################
+    # def extract_features(self, window):
+    #     """
+    #     Extract features from a window of EMG data using exact column naming from training
+    #     """
+    #     # Ensure window is oriented as [channels, samples]
+    #     if len(window.shape) == 1:
+    #         window = window.reshape(1, -1)
+        
+    #     if window.shape[0] > window.shape[1]:
+    #         window = window.T
+            
+    #     num_channels = window.shape[0]
+        
+    #     if self.debug:
+    #         print(f"Extracting features from window with {num_channels} channels, shape: {window.shape}")
+        
+    #     # Define feature types in the exact order used in training
+    #     feature_types = ['rms', 'variance', 'mav', 'ssc', 'zcr', 'wl']
+        
+    #     # Build feature dictionary with EXACT naming convention from training
+    #     features_dict = {}
+        
+    #     for channel_idx in range(num_channels):
+    #         channel_data = window[channel_idx]
+            
+    #         # Extract features for this channel
+    #         channel_features = self.feature_extractor.extract_features(channel_data)
+            
+    #         # Use exact naming format from your training data
+    #         # Format is "{channel_number}_{feature_type}" without "ch" prefix
+    #         for feat_type, value in channel_features.items():
+    #             col_name = f"{channel_idx+1}_{feat_type}"  # Changed from "ch{channel_idx+1}_"
+    #             features_dict[col_name] = value
+                
+    #     if self.debug:
+    #         print(f"Extracted {len(features_dict)} features")
+            
+    #     # If we have feature names from the model, ensure exact order
+    #     if self.feature_names:
+    #         ordered_features = []
+    #         missing_features = []
+            
+    #         for feature in self.feature_names:
+    #             if feature in features_dict:
+    #                 ordered_features.append(features_dict[feature])
+    #             else:
+    #                 missing_features.append(feature)
+    #                 # Use 0 as default for missing features
+    #                 ordered_features.append(0)
+                    
+    #         if missing_features and self.debug:
+    #             print(f"Warning: Missing {len(missing_features)} features: {missing_features[:5]}...")
+                
+    #         return ordered_features
+    #     else:
+    #         # Without feature names, return dictionary and hope order is preserved
+    #         return list(features_dict.values())
             
 
     def bagged_predict(self, features):
