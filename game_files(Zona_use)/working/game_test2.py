@@ -63,18 +63,18 @@ if EMG_MODULES_AVAILABLE:
     try:
         # if BITA:
         # Setup device
-        # device = BITalino(mac_address)
-        # device.battery(10)
-        # print("BITalino connected at global level")
-        # streamer = BitaStreamer(device)
+        device = BITalino(mac_address)
+        device.battery(10)
+        print("BITalino connected at global level")
+        streamer = BitaStreamer(device)
 
         # Setup streamer
         
         print("Created BITalino streamer at global level")
         # else:
-        import glob
-        files = glob.glob('./data/zona*')
-        streamer = TXTStreamer(filepath = files[0])
+        # import glob
+        # files = glob.glob('./data/zona*')
+        # streamer = TXTStreamer(filepath = files[0])
         
         # Setup pipeline
         # pipeline = EMGPipeline()
