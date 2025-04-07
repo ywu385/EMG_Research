@@ -19,13 +19,27 @@ from gamemanager2 import GameManager
 from spriralgame import GridSpiralChallenge
 #%%
 # BITA = True
+# Flag for model switching
+model_flag = '--model1'  # Default to model1
+if len(sys.argv) > 1:
+    if '--model1' in sys.argv:
+        model_flag = 'model1'
+    elif '--model2' in sys.argv:
+        model_flag = 'model2'
+
+print(f'Loading models and processors associated with {model_flag}')
+
+if model_flag == 'model1':
+    model_path = './working_models/LGBM_simple.pkl'
+    print('Base Model loaded as {model_path}')
+else:
+    model_path = './working_models/LGBM.pkl'
+    print('Experimental Model Loaded {model_path}')  
+
 
 # Import your custom EMG modules
-try:
-    
+try:    
     from revolution_api.bitalino import *
-    
-    
     EMG_MODULES_AVAILABLE = True
     print("All EMG modules loaded successfully")
 except ImportError as e:
@@ -102,15 +116,26 @@ if EMG_MODULES_AVAILABLE:
         print("Pipeline added to streamer at global level")
         
         # Setup model processor
-        model_processor = LGBMProcessor(
-            models=models,
-            window_size=250,
-            overlap=0.5,
-            sampling_rate=1000,
-            n_predictions=5,
-            wavelets  = ['sym5']
-            # label_encoder=label_encoder
-        )
+        if model_flag == 'model2':
+            model_processor = LGBMProcessor(
+                models=models,
+                window_size=250,
+                overlap=0.5,
+                sampling_rate=1000,
+                n_predictions=5,
+                wavelets  = ['sym5']
+                # label_encoder=label_encoder
+            )
+        else:
+            model_processor = LGBMProcessor(
+                models=models,
+                window_size=250,
+                overlap=0.5,
+                sampling_rate=1000,
+                n_predictions=5,
+                # wavelets  = ['sym5']
+                # label_encoder=label_encoder
+            )
         # model_processor = ModelProcessor(
         #     model = model,
         #     window_size = 250,
@@ -292,8 +317,8 @@ def main():
     # Mapping of EMG predictions to game directions
     # Customize based on your model's output classes
     prediction_mapping = {
-        'upward': 'down',
-        'downward': 'up',
+        'upward': 'up',
+        'downward': 'down',
         'inward': 'left',
         'outward': 'right',
         'rest':'rest',
@@ -301,8 +326,8 @@ def main():
         'Downward':'down',
         'Left':'left',
         'Right':'right',
-        'left':'right',
-        'right':'left'
+        # 'left':'right',
+        # 'right':'left'
         # Add mappings for your specific model outputs
     }
     
