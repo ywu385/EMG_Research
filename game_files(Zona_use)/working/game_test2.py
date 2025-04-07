@@ -164,6 +164,10 @@ def process_emg_data(model_processor, chunk_queue):
     counter = 0
     print("Starting to process EMG data...")
     
+     # Add this rate limiting variable 
+    last_intensity = 0
+    max_change_rate = 0.5  # Adjust this value to control the ramp speed (lower = more gradual)
+
     while True:  # This outer loop is crucial for reconnection
         try:
             # Process EMG data continuously
@@ -181,12 +185,31 @@ def process_emg_data(model_processor, chunk_queue):
                     
                     metric_att = 'smoothed_rms'
                     # metric_att = 'rms_values'
+                    # if i_metrics[metric_att] is not None and len(i_metrics[metric_att]) > 0:
+                    #     min_speed, max_speed = 0, 5  # Define min/max speed range
+                    #     # norm_rms = np.array(i_metrics['rms_values']).max() / i_metrics['max_rms_ever']
+                    #     norm_rms = i_metrics['overall_normalized_rms']
+                    #     intensity_value = min_speed + (norm_rms * (max_speed - min_speed))
+        ########################################################  New Intensity limit ######################################################################
                     if i_metrics[metric_att] is not None and len(i_metrics[metric_att]) > 0:
                         min_speed, max_speed = 0, 5  # Define min/max speed range
                         # norm_rms = np.array(i_metrics['rms_values']).max() / i_metrics['max_rms_ever']
                         norm_rms = i_metrics['overall_normalized_rms']
-                        intensity_value = min_speed + (norm_rms * (max_speed - min_speed))
-                
+                        
+                        # Calculate target intensity
+                        target_intensity = min_speed + (norm_rms * (max_speed - min_speed))
+                        
+                        # Apply rate limiting for more gradual changes
+                        change = target_intensity - last_intensity
+                        if abs(change) > max_change_rate:
+                            change = max_change_rate * (1 if change > 0 else -1)
+                        
+                        # Apply the limited change
+                        intensity_value = last_intensity + change
+                        
+                        # Store for next iteration
+                        last_intensity = intensity_value
+                ########################################################  New Intensity Limit (Above) ######################################################################
                     # Only when model buffer has enough data
                     if prediction is not None:
                         # Handle full queue by making space for new data
@@ -250,43 +273,6 @@ def clear_queue():
             break
     if count > 0:
         print(f"Cleared {count} items from the queue")
-
-# Simulation function for testing without actual EMG hardware
-def simulate_emg_data(chunk_queue):
-    """Simulate EMG data for testing"""
-    counter = 0
-    print("Starting EMG simulation...")
-    
-    # Possible prediction classes - update to match your model's output
-    prediction_classes = ["up", "down", "left", "right"]
-    
-    while True:
-        try:
-            # Generate mock prediction and intensity
-            prediction = random.choice(prediction_classes)
-            
-            # Generate intensity that varies sinusoidally (more natural)
-            intensity_value = 5.0 + 4.5 * math.sin(time.time() * 0.2)
-            intensity_value = max(0.5, min(10.0, intensity_value))
-            
-            # Handle full queue by making space for new data
-            if chunk_queue.full():
-                try:
-                    chunk_queue.get_nowait()
-                except:
-                    pass
-            
-            # Add newest prediction
-            chunk_queue.put((prediction, intensity_value), block=False)
-            print(f"Simulated {counter}: {prediction}, intensity={intensity_value:.2f}")
-            counter += 1
-            
-            # Sleep to simulate realistic update rate
-            time.sleep(0.2)
-                
-        except Exception as e:
-            print(f"Error in EMG simulation: {e}")
-            time.sleep(1)
 
 # Main function to run the game
 def main():
