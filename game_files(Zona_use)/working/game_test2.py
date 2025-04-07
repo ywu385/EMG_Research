@@ -190,7 +190,7 @@ def process_emg_data(model_processor, chunk_queue):
                     metric_att = 'smoothed_rms'
                     metric_att = 'rms_values'
                     if i_metrics[metric_att] is not None and len(i_metrics[metric_att]) > 0:
-                        min_speed, max_speed = 0, 3  # Define min/max speed range
+                        min_speed, max_speed = 0, 1  # Define min/max speed range
                         # norm_rms = np.array(i_metrics['rms_values']).max() / i_metrics['max_rms_ever']
                         norm_rms = i_metrics['overall_normalized_rms']
                         intensity_value = min_speed + (norm_rms * (max_speed - min_speed))
