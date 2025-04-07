@@ -25,18 +25,18 @@ nSamples = 10
 macAddress = "/dev/tty.BITalino-3C-C2"
 
 ### Setup of the Device and Streamer ###
-device = BITalino(macAddress)
+# device = BITalino(macAddress)
 
-device.battery(batteryThreshold)
+# device.battery(batteryThreshold)
 
-streamer = BitaStreamer(device) # BitaStreamer 
+# streamer = BitaStreamer(device) # BitaStreamer 
 
 ######################################################## TXT STREAMER ######################################################################
-# import glob 
-# data_path = glob.glob('./data/combined/*')
+import glob 
+data_path = glob.glob('./data/zona*')
 
-# print(f'Data loaded is {data_path[1]}')
-# streamer = TXTStreamer(data_path[1])
+print(f'Data loaded is {data_path[0]}')
+streamer = TXTStreamer(data_path[0])
 
 ######################################################## END TXT STREAMER ######################################################################
 #%%
@@ -47,7 +47,7 @@ pipeline.add_processor(NotchFilter([60],sampling_rate = 1000))
 pipeline.add_processor(DCRemover())
 # bandpass = ButterFilter(cutoff=[20, 450], sampling_rate=1000, filter_type='bandpass', order=4)
 # pipeline.add_processor(bandpass)
-# pipeline.add_processor(MaxNormalizer())
+pipeline.add_processor(MaxNormalizer())
 
 
 streamer.add_pipeline(pipeline)

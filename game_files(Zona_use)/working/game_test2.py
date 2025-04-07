@@ -9,21 +9,22 @@ import glob
 import atexit
 import sys
 import random
-from post_processing import BaggedRF
 from stream_processor_bit import *
 from processors import *
+from post_processing import *
 
 # Import game classes
 from target_game import TargetGame
 from gamemanager2 import GameManager
 from spriralgame import GridSpiralChallenge
 #%%
+# BITA = True
+
 # Import your custom EMG modules
 try:
     
-    
     from revolution_api.bitalino import *
-    from post_processing import *
+    
     
     EMG_MODULES_AVAILABLE = True
     print("All EMG modules loaded successfully")
@@ -60,14 +61,20 @@ mac_address = "/dev/tty.BITalino-3C-C2"  # Update with your device's address
 # Initialize device and streamer
 if EMG_MODULES_AVAILABLE:
     try:
+        # if BITA:
         # Setup device
-        device = BITalino(mac_address)
-        device.battery(10)
-        print("BITalino connected at global level")
-        
+        # device = BITalino(mac_address)
+        # device.battery(10)
+        # print("BITalino connected at global level")
+        # streamer = BitaStreamer(device)
+
         # Setup streamer
-        streamer = BitaStreamer(device)
+        
         print("Created BITalino streamer at global level")
+        # else:
+        import glob
+        files = glob.glob('./data/zona*')
+        streamer = TXTStreamer(filepath = files[0])
         
         # Setup pipeline
         # pipeline = EMGPipeline()
@@ -90,7 +97,7 @@ if EMG_MODULES_AVAILABLE:
         #                 )
         # pipeline.add_processor(emg_bandpass)
         # pipeline.add_processor(AdaptiveMaxNormalizer())
-        pipeline.add_processor(MaxNormalizer())
+        # pipeline.add_processor(MaxNormalizer())
         streamer.add_pipeline(pipeline)
         print("Pipeline added to streamer at global level")
         

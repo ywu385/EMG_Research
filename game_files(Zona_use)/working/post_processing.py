@@ -7,6 +7,12 @@ import numpy as np
 from processors import SignalProcessor
 import pickle
 from typing import List
+import warnings
+
+# Suppress the warning about feature names
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", category=UserWarning, 
+                           module='sklearn.utils.validation')
 
 ######################################################## Buffering class ######################################################################
 class SignalBuffer:
@@ -222,242 +228,766 @@ class WideModelProcessor(SignalProcessor):
         else:
             return pred
 
-######################################################## LGBM ######################################################################
+######################################################## LGBM with basic ######################################################################
+
 class LGBMProcessor(SignalProcessor):
     def __init__(self, models, window_size=250, overlap=0.5, sampling_rate=1000, 
-                 n_predictions=5, aggregate=True):
+                 n_predictions=5, aggregate=True, debug=False):
         """
         Args:
-            model: Loaded ML model or path to model file
+            models: Trained LGBM models list for ensemble prediction
             window_size: Number of samples per window
             overlap: Overlap ratio between windows (0 to 1)
             sampling_rate: Sampling rate in Hz
             n_predictions: Number of recent predictions to consider for mode
             aggregate: Whether to return the mode of recent predictions
+            debug: Enable verbose logging for debugging
         """
-        # Check if model is a string (file path)
-        if isinstance(models, str):
-            model_dict = self.load_model(models)
-            models = model_dict['models']
-            print("Model loaded via path")
-        
-        self.models = models
+        self.models = models if isinstance(models, list) else [models]
         self.window_size = window_size
         self.sampling_rate = sampling_rate
         self.aggregate = aggregate
         self.n_predictions = n_predictions
         self.prediction_history = []
-        self.wavelet_extractors = [
-            WaveletFeatureExtractor(wavelet='sym4', levels=2),
-            WaveletFeatureExtractor(wavelet='sym5', levels=2),
-            WaveletFeatureExtractor(wavelet='db4', levels=2)
-            ]
-        self.basic_extractor = FeatureUtils()
-
-    
-    @staticmethod
-    def load_model(model_path):
-        import os
-        import pickle
+        self.debug = debug
+        self.latest_probabilities = None
         
-        if not os.path.exists(model_path):
-            raise FileNotFoundError(f"Model path {model_path} not found, check path again")
+        # Feature extractors - matching training pipeline
+        self.feature_extractor = FeatureUtils()
         
+        # Get expected feature order from first model (if possible)
+        self.feature_names = self._get_feature_names()
+        
+        if self.debug:
+            print(f"Initialized LGBMProcessor with {len(self.models)} models")
+            if self.feature_names:
+                print(f"Expecting {len(self.feature_names)} features in order")
+        
+    def _get_feature_names(self):
+        """Try to get feature names from first model if available"""
         try:
-            with open(model_path, 'rb') as file:
-                model = pickle.load(file)
-            return model
+            if hasattr(self.models[0], 'feature_name_'):
+                return self.models[0].feature_name_
+        except:
+            pass
+        return None
+        
+    def extract_features(self, window):
+        """
+        Extract features from a window of EMG data using exact column naming from training
+        """
+        # Ensure window is oriented as [channels, samples]
+        if len(window.shape) == 1:
+            window = window.reshape(1, -1)
+        
+        if window.shape[0] > window.shape[1]:
+            window = window.T
+            
+        num_channels = window.shape[0]
+        
+        if self.debug:
+            print(f"Extracting features from window with {num_channels} channels, shape: {window.shape}")
+        
+        # Define feature types in the exact order used in training
+        feature_types = ['rms', 'variance', 'mav', 'ssc', 'zcr', 'wl']
+        
+        # Build feature dictionary with EXACT naming convention from training
+        features_dict = {}
+        
+        for channel_idx in range(num_channels):
+            channel_data = window[channel_idx]
+            
+            # Extract features for this channel
+            channel_features = self.feature_extractor.extract_features(channel_data)
+            
+            # Use exact naming format from your training data
+            # Format is "{channel_number}_{feature_type}" without "ch" prefix
+            for feat_type, value in channel_features.items():
+                col_name = f"{channel_idx+1}_{feat_type}"  # Changed from "ch{channel_idx+1}_"
+                features_dict[col_name] = value
+                
+        if self.debug:
+            print(f"Extracted {len(features_dict)} features")
+            
+        # If we have feature names from the model, ensure exact order
+        if self.feature_names:
+            ordered_features = []
+            missing_features = []
+            
+            for feature in self.feature_names:
+                if feature in features_dict:
+                    ordered_features.append(features_dict[feature])
+                else:
+                    missing_features.append(feature)
+                    # Use 0 as default for missing features
+                    ordered_features.append(0)
+                    
+            if missing_features and self.debug:
+                print(f"Warning: Missing {len(missing_features)} features: {missing_features[:5]}...")
+                
+            return ordered_features
+        else:
+            # Without feature names, return dictionary and hope order is preserved
+            return list(features_dict.values())
+            
+
+    def bagged_predict(self, features):
+        """Make ensemble prediction using all models"""
+        # Reshape features to 2D if needed
+        if len(np.array(features).shape) == 1:
+            features_array = np.array(features).reshape(1, -1)
+        else:
+            features_array = np.array(features)
+            
+        # Get predictions from all models
+        all_preds = []
+        all_probs = []
+        
+        # Suppress the feature names warning
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=UserWarning, 
+                                module='sklearn.utils.validation')
+            
+            for model in self.models:
+                try:
+                    preds = model.predict(features_array)
+                    all_preds.append(preds[0])
+                    
+                    # Try to get probabilities if available
+                    try:
+                        probs = model.predict_proba(features_array)[0]
+                        all_probs.append(probs)
+                    except:
+                        pass
+                except Exception as e:
+                    if self.debug:
+                        print(f"Prediction error: {str(e)}")
+                    
+        # Store probabilities for debugging
+        if all_probs:
+            # Average the probabilities from all models
+            self.latest_probabilities = np.mean(all_probs, axis=0)
+            
+        # Return most common prediction (mode)
+        from collections import Counter
+        prediction = Counter(all_preds).most_common(1)[0][0]
+        return prediction
+        
+    def process(self, window):
+        """
+        Process window to make prediction
+        
+        Args:
+            window: EMG data window
+            
+        Returns:
+            Prediction label
+        """
+        try:
+            # Extract features
+            features = self.extract_features(window)
+            
+            # Make prediction
+            prediction = self.bagged_predict(features)
+            
+            # Update prediction history
+            self.prediction_history.append(prediction)
+            if len(self.prediction_history) > self.n_predictions:
+                self.prediction_history.pop(0)
+                
+            # Return mode of recent predictions if aggregating
+            if self.aggregate and len(self.prediction_history) > 0:
+                from collections import Counter
+                return Counter(self.prediction_history).most_common(1)[0][0]
+                
+            return prediction
         except Exception as e:
-            raise Exception(f"Error loading model: {str(e)}")
-    
+            if self.debug:
+                print(f"Processing error: {str(e)}")
+            return None
 
-    # def extract_features(self, window: np.ndarray) -> list:
-    #     """
-    #     Extract features from each channel in the window.
-    #     This function encapsulates the feature extraction logic so that you
-    #     can easily inspect or debug the features.
-    #     """
-    #     features = []
-    #     # Loop through each channel and extract features using different methods.
-    #     for channel in window:
-    #         features.extend(list(WaveletFeatureExtractor(wavelet='sym4', levels=2).extract_features(channel).values()))
-    #         features.extend(list(WaveletFeatureExtractor(wavelet='sym5',levels=2).extract_features(channel).values()))
-    #         features.extend(list(WaveletFeatureExtractor(wavelet='db4',levels=2).extract_features(channel).values()))
-    #         features.extend(list(FeatureUtils.extract_features(channel).values()))
-    #     return features
-    def extract_features(self, window: np.ndarray) -> list:
-        features = []
-        for channel in window:
-            # Use the pre-created extractors
-            for extractor in self.wavelet_extractors:
-                features.extend(list(extractor.extract_features(channel).values()))
-            features.extend(list(self.basic_extractor.extract_features(channel).values()))
-        return features
-
-    def process(self, window: np.ndarray, debug: bool = False) -> np.ndarray:
-        """
-        Process a single window of EMG data and return prediction with smoothing.
-        Optionally, print out the features for debugging if debug=True.
-        """
-        # Extract features
-        features = self.extract_features(window)
-        # Store features for later inspection if needed
-        self.last_features = features
-        
-        # Print features if in debug mode
-        if debug:
-            print("Extracted features:", features)
-        
-        # Make prediction
-        pred = self.predict_bagged(np.array(features).reshape(1, -1))[0]
-
-        # Add to prediction history
-        self.prediction_history.append(pred)
-        if len(self.prediction_history) > self.n_predictions:
-            self.prediction_history.pop(0)
-        
-        # Return individual prediction or the mode of recent predictions
-        if self.aggregate and self.prediction_history:
-            return mode(self.prediction_history)
-        else:
-            return pred
-        
-    def predict_bagged(self, X):
-        models = self.models
-        model_predictions = [model.predict(X) for model in models]
-        print(f"Individual model predictions: {model_predictions}")
-        
-        preds = np.array(model_predictions).T
-        print(f"Transposed predictions shape: {preds.shape}")
-        
-        result = np.array([Counter(row).most_common(1)[0][0] for row in preds])
-        print(f"Final aggregated prediction: {result}")
-        
-        return result
-        
-    # def predict_bagged(self, X):
-    #     models = self.models
-    #     all_preds = [model.predict(X) for model in models]
-    #     return np.array([
-    #         Counter(col).most_common(1)[0][0] for col in zip(*all_preds)
-    #     ])
-    
-    # def predict_bagged(self, X):
-    #     models = self.models
-    #     all_preds = [model.predict(X) for model in models]
-        
-    #     # Initialize latest_probabilities attribute
-    #     self.latest_probabilities = None
-        
-    #     # Try to get probabilities if available
-    #     try:
-    #         if hasattr(models[0], 'predict_proba'):
-    #             # Average probabilities from all models
-    #             all_probs = [model.predict_proba(X)[0] for model in models]
-    #             self.latest_probabilities = np.mean(all_probs, axis=0)
-    #     except Exception as e:
-    #         # Silently fail if probabilities aren't available
-    #         pass
-        
-    #     return np.array([
-    #         Counter(col).most_common(1)[0][0] for col in zip(*all_preds)
-    #     ])
-    
-    def process_with_metadata(self, window: np.ndarray, debug: bool = False) -> dict:
-        """
-        Process a window and return a rich prediction object with metadata.
-        """
-        # Extract features
-        features = self.extract_features(window)
-        self.last_features = features
-        
-        if debug:
-            print("Extracted features:", features)
-        
-        # Make prediction using your bagged prediction method
-        X = np.array(features).reshape(1, -1)
-        pred = self.predict_bagged(X)[0]
-        
-        # Add to prediction history (keep this consistent with your original method)
-        self.prediction_history.append(pred)
-        if len(self.prediction_history) > self.n_predictions:
-            self.prediction_history.pop(0)
-        
-        # If aggregation is enabled, get the most common prediction
-        if self.aggregate and self.prediction_history:
-            final_prediction = mode(self.prediction_history)
-        else:
-            final_prediction = pred
-        
-        # Create result dictionary with all metadata
-        result = {
-            'label': final_prediction,
-            'raw_prediction': pred,
-            'prediction_history': self.prediction_history.copy(),
-            'confidence': 0.0,
-            'probabilities': {}
-        }
-        
-        # Add probabilities if available
-        if hasattr(self, 'latest_probabilities') and self.latest_probabilities is not None:
-            classes = [str(i) for i in range(len(self.latest_probabilities))]
-            result['probabilities'] = {c: p for c, p in zip(classes, self.latest_probabilities)}
-            result['confidence'] = max(self.latest_probabilities)
-        
-        return result
-######################################################## OLD IMPLEMENTATION ######################################################################
-# class IntensityProcessor:
-#     """Processes EMG signal windows and calculates intensity based on extracted features"""
-#     def __init__(self, scaling_factor=1.5):
-#         self.max_rms = None
-#         self.scaling_factor = scaling_factor
-    
-#     def process(self, window: np.ndarray) -> dict:
+######################################################## OLD STUFF ######################################################################
+# class LGBMProcessor(SignalProcessor):
+#     def __init__(self, models, window_size=250, overlap=0.5, sampling_rate=1000, 
+#                  n_predictions=5, aggregate=True):
 #         """
-#         Process EMG window and calculate intensity metrics
+#         Args:
+#             models: Loaded ML model or path to model file
+#             window_size: Number of samples per window
+#             overlap: Overlap ratio between windows (0 to 1)
+#             sampling_rate: Sampling rate in Hz
+#             n_predictions: Number of recent predictions to consider for mode
+#             aggregate: Whether to return the mode of recent predictions
+#         """
+#         # Check if model is a string (file path)
+#         if isinstance(models, str):
+#             model_dict = self.load_model(models)
+#             models = model_dict['models']
+#             print("Model loaded via path")
+        
+#         self.models = models
+#         self.window_size = window_size
+#         self.sampling_rate = sampling_rate
+#         self.aggregate = aggregate
+#         self.n_predictions = n_predictions
+#         self.prediction_history = []
+        
+#         # Only use basic features extractor
+#         self.basic_extractor = FeatureUtils()
+        
+#         # For debugging
+#         self.debug = False
+    
+#     @staticmethod
+#     def load_model(model_path):
+#         import os
+#         import pickle
+        
+#         if not os.path.exists(model_path):
+#             raise FileNotFoundError(f"Model path {model_path} not found, check path again")
+        
+#         try:
+#             with open(model_path, 'rb') as file:
+#                 model = pickle.load(file)
+#             return model
+#         except Exception as e:
+#             raise Exception(f"Error loading model: {str(e)}")
+        
+#     def extract_features(self, window: np.ndarray) -> list:
+#         """
+#         Extract features from a window of EMG data,
+#         ensuring feature order matches training data exactly.
         
 #         Args:
-#             window: EMG data array of shape (channels, samples)
+#             window: EMG data with shape [channels, samples]
             
 #         Returns:
-#             Dictionary with intensity metrics
+#             List of feature values in consistent order matching training
 #         """
-#         feature_values = []
+#         # Ensure window is oriented as [channels, samples]
+#         if len(window.shape) == 1:
+#             # Single channel data
+#             window = window.reshape(1, -1)
         
-#         # Extract features from each channel
-#         for channel in window:
-#             features = FeatureUtils.extract_features(channel)
-#             feature_values.append(features)
+#         if window.shape[0] > window.shape[1]:  # More rows than columns
+#             if self.debug:
+#                 print("WARNING: Window appears to be transposed (more rows than columns)")
+#                 print(f"Original shape: {window.shape}, transposing...")
+#             window = window.T
+#             if self.debug:
+#                 print(f"New shape: {window.shape}")
         
-#         # Get RMS values from all channels
-#         rms_values = [features['rms'] for features in feature_values]
-#         current_max_rms = max(rms_values)
+#         num_channels = window.shape[0]
         
-#         # Initialize max_rms if this is first window
-#         if self.max_rms is None:
-#             self.max_rms = current_max_rms * self.scaling_factor
+#         if self.debug:
+#             print(f"Processing window with shape: {window.shape}, {num_channels} channels")
         
-#         # Update max RMS if we see a higher value
-#         if current_max_rms > self.max_rms:
-#             self.max_rms = current_max_rms
+#         # Define the expected order of feature types based on your dataset
+#         feature_types = ['rms', 'variance', 'mav', 'ssc', 'zcr', 'wl']
         
-#         # Calculate average RMS and normalize
-#         avg_rms = np.mean(rms_values)
-#         # normalized_rms = avg_rms / self.max_rms
+#         features = []
         
-#         # Get MAV values from all channels
-#         # mav_values = [features['mav'] for features in feature_values]
-#         # avg_mav = np.mean(mav_values)
+#         # Extract features by channel, then by feature type
+#         for channel_idx in range(num_channels):
+#             channel_data = window[channel_idx]
+            
+#             if self.debug:
+#                 print(f"Processing channel {channel_idx+1} basic features")
+            
+#             # Extract basic features
+#             basic_features = self.basic_extractor.extract_features(channel_data)
+            
+#             # Add features in the specific order that matches training
+#             for feature_type in feature_types:
+#                 if feature_type in basic_features:
+#                     features.append(basic_features[feature_type])
+#                 elif self.debug:
+#                     print(f"Warning: Feature {feature_type} not found for channel {channel_idx+1}")
         
-#         return {
-#             'feature_values': feature_values,  # All extracted features
-#             'rms_values': rms_values,          # RMS for each channel
-#             'max_rms_ever': self.max_rms,      # Historical maximum RMS
-#             # 'normalized_rms': normalized_rms,  # Normalized average RMS
-#             'avg_rms': avg_rms,                # Average RMS across channels
-#             # 'avg_mav': avg_mav,                # Average MAV across channels
-#             'max_channel': np.argmax(rms_values)  # Most active channel
+#         if self.debug:
+#             print(f"Extracted {len(features)} features in channel-first order")
+#             # Print expected feature names in the order they were added
+#             expected_names = [f"{c+1}_{f}" for c in range(num_channels) for f in feature_types]
+#             print(f"Expected feature order: {expected_names[:10]}...")
+        
+#         return features
+    
+
+#     def process(self, window: np.ndarray, debug: bool = False) -> np.ndarray:
+#         """
+#         Process a single window of EMG data and return prediction with smoothing.
+#         """
+#         self.debug = debug
+        
+#         # Extract features
+#         features = self.extract_features(window)
+        
+#         # Store features for later inspection
+#         self.last_features = features
+        
+#         # Print debug info if requested
+#         if debug:
+#             print(f"Extracted {len(features)} features")
+#             print(f"First few features: {features[:3]}")
+#             print(f"Last few features: {features[-3:]}")
+        
+#         # Make prediction with ensemble
+#         pred = self.predict_bagged(np.array(features).reshape(1, -1))[0]
+        
+#         if debug:
+#             print(f"Raw prediction: {pred}")
+
+#         # Add to prediction history
+#         self.prediction_history.append(pred)
+#         if len(self.prediction_history) > self.n_predictions:
+#             self.prediction_history.pop(0)
+        
+#         # Return individual prediction or the mode of recent predictions
+#         if self.aggregate and len(self.prediction_history) > 0:
+#             from collections import Counter
+#             most_common = Counter(self.prediction_history).most_common(1)[0][0]
+            
+#             if debug:
+#                 print(f"Prediction history: {self.prediction_history}")
+#                 print(f"Aggregated prediction: {most_common}")
+            
+#             return most_common
+#         else:
+#             return pred
+        
+#     def predict_bagged(self, X):
+#         """
+#         Make predictions using an ensemble of models.
+#         """
+#         from collections import Counter
+        
+#         # Get predictions from all models
+#         model_predictions = [model.predict(X) for model in self.models]
+        
+#         if self.debug:
+#             print(f"Individual model predictions: {model_predictions}")
+        
+#         # Transpose the predictions
+#         preds = np.array(model_predictions).T
+        
+#         # Get the most common prediction for each sample
+#         result = np.array([Counter(row).most_common(1)[0][0] for row in preds])
+        
+#         return result
+
+######################################################## LGBM ######################################################################
+# class LGBMProcessor(SignalProcessor):
+#     def __init__(self, models, window_size=250, overlap=0.5, sampling_rate=1000, 
+#                  n_predictions=5, aggregate=True):
+#         """
+#         Args:
+#             model: Loaded ML model or path to model file
+#             window_size: Number of samples per window
+#             overlap: Overlap ratio between windows (0 to 1)
+#             sampling_rate: Sampling rate in Hz
+#             n_predictions: Number of recent predictions to consider for mode
+#             aggregate: Whether to return the mode of recent predictions
+#         """
+#         # Check if model is a string (file path)
+#         if isinstance(models, str):
+#             model_dict = self.load_model(models)
+#             models = model_dict['models']
+#             print("Model loaded via path")
+        
+#         self.models = models
+#         self.window_size = window_size
+#         self.sampling_rate = sampling_rate
+#         self.aggregate = aggregate
+#         self.n_predictions = n_predictions
+#         self.prediction_history = []
+#         self.wavelet_extractors = [
+#             WaveletFeatureExtractor(wavelet='sym4', levels=2),
+#             # WaveletFeatureExtractor(wavelet='sym5', levels=2),
+#             # WaveletFeatureExtractor(wavelet='db4', levels=2)
+#             ]
+#         self.basic_extractor = FeatureUtils()
+# class LGBMProcessor(SignalProcessor):
+#     def __init__(self, models, window_size=250, overlap=0.5, sampling_rate=1000, 
+#                  n_predictions=5, aggregate=True):
+#         """
+#         Args:
+#             models: List of trained models or path to model file
+#             window_size: Number of samples per window
+#             overlap: Overlap ratio between windows (0 to 1)
+#             sampling_rate: Sampling rate in Hz
+#             n_predictions: Number of recent predictions to consider for mode
+#             aggregate: Whether to return the mode of recent predictions
+#         """
+#         # Check if model is a string (file path)
+#         if isinstance(models, str):
+#             model_dict = self.load_model(models)
+#             models = model_dict['models']
+#             print("Model loaded via path")
+        
+#         self.models = models
+#         self.window_size = window_size
+#         self.sampling_rate = sampling_rate
+#         self.aggregate = aggregate
+#         self.n_predictions = n_predictions
+#         self.prediction_history = []
+        
+#         # Initialize extractors (only using sym4 as in training)
+#         # self.wavelet_extractor = WaveletFeatureExtractor(wavelet='sym4', levels=2)
+#         self.wavelet_extractor = None
+#         self.basic_extractor = FeatureUtils()
+        
+#         # Enable debug mode for detailed logging
+#         self.debug = False
+    
+#     @staticmethod
+#     def load_model(model_path):
+#         import os
+#         import pickle
+        
+#         if not os.path.exists(model_path):
+#             raise FileNotFoundError(f"Model path {model_path} not found, check path again")
+        
+#         try:
+#             with open(model_path, 'rb') as file:
+#                 model = pickle.load(file)
+#             return model
+#         except Exception as e:
+#             raise Exception(f"Error loading model: {str(e)}")
+    
+#     def extract_features(self, window: np.ndarray) -> list:
+#         """
+#         Extract features in the exact same order as used during training.
+        
+#         This matches the process in dataset_prep where:
+#         1. First all features for sym4 wavelet are extracted for each channel
+#         2. Then all basic features are extracted for each channel
+#         """
+#         all_features = []
+        
+#         num_channels = window.shape[1] if len(window.shape) > 1 else 1
+        
+#         if self.debug:
+#             print(f"Processing window with shape: {window.shape}, detected {num_channels} channels")
+        
+#         # First extract wavelet features for all channels
+#         if self.wavelet_extractor:
+#             for channel_idx in range(num_channels):
+#                 channel_data = window[:, channel_idx] if len(window.shape) > 1 else window
+                
+#                 # Extract wavelet features (sym4)
+#                 wavelet_features = self.wavelet_extractor.extract_features(channel_data)
+                
+#                 if self.debug:
+#                     print(f"Channel {channel_idx+1} wavelet features: {list(wavelet_features.keys())}")
+                
+#                 # Add each feature value to the list
+#                 for feature_value in wavelet_features.values():
+#                     all_features.append(feature_value)
+        
+#         # Then extract basic features for all channels
+#         for channel_idx in range(num_channels):
+#             channel_data = window[:, channel_idx] if len(window.shape) > 1 else window
+            
+#             # Extract basic features
+#             basic_features = self.basic_extractor.extract_features(channel_data)
+            
+#             if self.debug:
+#                 print(f"Channel {channel_idx+1} basic features: {list(basic_features.keys())}")
+            
+#             # Add each feature value to the list
+#             for feature_value in basic_features.values():
+#                 all_features.append(feature_value)
+        
+#         if self.debug:
+#             print(f"Total features extracted: {len(all_features)}")
+        
+#         return all_features
+
+#     def process(self, window: np.ndarray, debug: bool = False) -> np.ndarray:
+#         """
+#         Process a single window of EMG data and return prediction with smoothing.
+#         """
+#         self.debug = debug
+        
+#         # Extract features
+#         features = self.extract_features(window)
+#         # Store features for later inspection if needed
+#         self.last_features = features
+        
+#         # Print features if in debug mode
+#         if debug:
+#             print(f"Extracted {len(features)} features")
+#             print(f"First 3 features: {features[:3]}")
+#             print(f"Last 3 features: {features[-3:]}")
+        
+#         # Make prediction with the ensemble
+#         pred = self.predict_bagged(np.array(features).reshape(1, -1))[0]
+        
+#         if debug:
+#             print(f"Raw prediction: {pred}")
+
+#         # Add to prediction history
+#         self.prediction_history.append(pred)
+#         if len(self.prediction_history) > self.n_predictions:
+#             self.prediction_history.pop(0)
+        
+#         # Return individual prediction or the mode of recent predictions
+#         if self.aggregate and len(self.prediction_history) > 0:
+#             from collections import Counter
+#             most_common = Counter(self.prediction_history).most_common(1)[0][0]
+            
+#             if debug:
+#                 print(f"Prediction history: {self.prediction_history}")
+#                 print(f"Aggregated prediction: {most_common}")
+            
+#             return most_common
+#         else:
+#             return pred
+        
+#     def predict_bagged(self, X):
+#         """
+#         Make predictions using an ensemble of models.
+#         """
+#         from collections import Counter
+        
+#         # Get predictions from all models
+#         model_predictions = [model.predict(X) for model in self.models]
+        
+#         if self.debug:
+#             print(f"Individual model predictions: {model_predictions}")
+        
+#         # Transpose predictions for each sample
+#         preds = np.array(model_predictions).T
+        
+#         # Get most common prediction for each sample
+#         result = np.array([Counter(row).most_common(1)[0][0] for row in preds])
+        
+#         if self.debug:
+#             print(f"Final bagged prediction: {result}")
+        
+#         return result
+
+
+# class LGBMProcessor(SignalProcessor):
+#     def __init__(self, models, window_size=250, overlap=0.5, sampling_rate=1000, 
+#                  n_predictions=5, aggregate=True):
+#         """
+#         Args:
+#             model: Loaded ML model or path to model file
+#             window_size: Number of samples per window
+#             overlap: Overlap ratio between windows (0 to 1)
+#             sampling_rate: Sampling rate in Hz
+#             n_predictions: Number of recent predictions to consider for mode
+#             aggregate: Whether to return the mode of recent predictions
+#         """
+#         # Check if model is a string (file path)
+#         if isinstance(models, str):
+#             model_dict = self.load_model(models)
+#             models = model_dict['models']
+#             print("Model loaded via path")
+        
+#         self.models = models
+#         self.window_size = window_size
+#         self.sampling_rate = sampling_rate
+#         self.aggregate = aggregate
+#         self.n_predictions = n_predictions
+#         self.prediction_history = []
+        
+#         # Use the same wavelet types as in your training script
+#         self.wavelet_types = ['sym4']  # Make sure this matches your training
+#         self.wavelet_extractors = {
+#             wavelet: WaveletFeatureExtractor(wavelet=wavelet, levels=2)
+#             for wavelet in self.wavelet_types
 #         }
+#         self.basic_extractor = FeatureUtils()
+
+    
+#     @staticmethod
+#     def load_model(model_path):
+#         import os
+#         import pickle
+        
+#         if not os.path.exists(model_path):
+#             raise FileNotFoundError(f"Model path {model_path} not found, check path again")
+        
+#         try:
+#             with open(model_path, 'rb') as file:
+#                 model = pickle.load(file)
+#             return model
+#         except Exception as e:
+#             raise Exception(f"Error loading model: {str(e)}")
+    
+
+#     # def extract_features(self, window: np.ndarray) -> list:
+#     #     """
+#     #     Extract features from each channel in the window.
+#     #     This function encapsulates the feature extraction logic so that you
+#     #     can easily inspect or debug the features.
+#     #     """
+#     #     features = []
+#     #     # Loop through each channel and extract features using different methods.
+#     #     for channel in window:
+#     #         features.extend(list(WaveletFeatureExtractor(wavelet='sym4', levels=2).extract_features(channel).values()))
+#     #         features.extend(list(WaveletFeatureExtractor(wavelet='sym5',levels=2).extract_features(channel).values()))
+#     #         features.extend(list(WaveletFeatureExtractor(wavelet='db4',levels=2).extract_features(channel).values()))
+#     #         features.extend(list(FeatureUtils.extract_features(channel).values()))
+#     #     return features
+#     # def extract_features(self, window: np.ndarray) -> list:
+#     #     features = []
+#     #     for channel in window:
+#     #         # Use the pre-created extractors
+#     #         for extractor in self.wavelet_extractors:
+#     #             features.extend(list(extractor.extract_features(channel).values()))
+#     #         features.extend(list(self.basic_extractor.extract_features(channel).values()))
+#     #     return features
+
+#     def extract_features(self, window: np.ndarray) -> list:
+#         """
+#         Extract features in the exact same order as used during training.
+#         This implementation mimics the dataset preparation process to ensure
+#         feature order consistency.
+#         """
+#         # First extract all wavelet features for each channel
+#         all_wavelet_features = []
+#         for wavelet_type in self.wavelet_types:
+#             wavelet_extractor = self.wavelet_extractors[wavelet_type]
+#             for channel_idx, channel in enumerate(window):
+#                 # Extract wavelet features
+#                 channel_wavelet_features = wavelet_extractor.extract_features(channel)
+#                 # Add each feature to the list (would be renamed in training)
+#                 for feature_name, feature_value in channel_wavelet_features.items():
+#                     all_wavelet_features.append(feature_value)
+        
+#         # Then extract all basic features for each channel
+#         all_basic_features = []
+#         for channel_idx, channel in enumerate(window):
+#             # Extract basic features
+#             channel_basic_features = self.basic_extractor.extract_features(channel)
+#             # Add each feature to the list
+#             for feature_name, feature_value in channel_basic_features.items():
+#                 all_basic_features.append(feature_value)
+        
+#         # Combine all features in the same order as training
+#         all_features = all_wavelet_features + all_basic_features
+        
+#         # Debug information - print feature count to verify it matches training
+#         expected_count = len(window) * (len(self.wavelet_types) * 6 * 3 + 6)  # Adjust based on your feature counts
+#         if len(all_features) != expected_count:
+#             print(f"WARNING: Feature count mismatch. Expected {expected_count}, got {len(all_features)}")
+        
+#         return all_features
+
+#     def process(self, window: np.ndarray, debug: bool = False) -> np.ndarray:
+#         """
+#         Process a single window of EMG data and return prediction with smoothing.
+#         Optionally, print out the features for debugging if debug=True.
+#         """
+#         # Extract features
+#         features = self.extract_features(window)
+#         # Store features for later inspection if needed
+#         self.last_features = features
+        
+#         # Print features if in debug mode
+#         if debug:
+#             print("Extracted features:", features)
+        
+#         # Make prediction
+#         pred = self.predict_bagged(np.array(features).reshape(1, -1))[0]
+
+#         # Add to prediction history
+#         self.prediction_history.append(pred)
+#         if len(self.prediction_history) > self.n_predictions:
+#             self.prediction_history.pop(0)
+        
+#         # Return individual prediction or the mode of recent predictions
+#         if self.aggregate and self.prediction_history:
+#             return mode(self.prediction_history)
+#         else:
+#             return pred
+        
+#     def predict_bagged(self, X):
+#         models = self.models
+#         model_predictions = [model.predict(X) for model in models]
+#         print(f"Individual model predictions: {model_predictions}")
+        
+#         preds = np.array(model_predictions).T
+#         print(f"Transposed predictions shape: {preds.shape}")
+        
+#         result = np.array([Counter(row).most_common(1)[0][0] for row in preds])
+#         print(f"Final aggregated prediction: {result}")
+        
+#         return result
+        
+#     # def predict_bagged(self, X):
+#     #     models = self.models
+#     #     all_preds = [model.predict(X) for model in models]
+#     #     return np.array([
+#     #         Counter(col).most_common(1)[0][0] for col in zip(*all_preds)
+#     #     ])
+    
+#     # def predict_bagged(self, X):
+#     #     models = self.models
+#     #     all_preds = [model.predict(X) for model in models]
+        
+#     #     # Initialize latest_probabilities attribute
+#     #     self.latest_probabilities = None
+        
+#     #     # Try to get probabilities if available
+#     #     try:
+#     #         if hasattr(models[0], 'predict_proba'):
+#     #             # Average probabilities from all models
+#     #             all_probs = [model.predict_proba(X)[0] for model in models]
+#     #             self.latest_probabilities = np.mean(all_probs, axis=0)
+#     #     except Exception as e:
+#     #         # Silently fail if probabilities aren't available
+#     #         pass
+        
+#     #     return np.array([
+#     #         Counter(col).most_common(1)[0][0] for col in zip(*all_preds)
+#     #     ])
+    
+#     def process_with_metadata(self, window: np.ndarray, debug: bool = False) -> dict:
+#         """
+#         Process a window and return a rich prediction object with metadata.
+#         """
+#         # Extract features
+#         features = self.extract_features(window)
+#         self.last_features = features
+        
+#         if debug:
+#             print("Extracted features:", features)
+        
+#         # Make prediction using your bagged prediction method
+#         X = np.array(features).reshape(1, -1)
+#         pred = self.predict_bagged(X)[0]
+        
+#         # Add to prediction history (keep this consistent with your original method)
+#         self.prediction_history.append(pred)
+#         if len(self.prediction_history) > self.n_predictions:
+#             self.prediction_history.pop(0)
+        
+#         # If aggregation is enabled, get the most common prediction
+#         if self.aggregate and self.prediction_history:
+#             final_prediction = mode(self.prediction_history)
+#         else:
+#             final_prediction = pred
+        
+#         # Create result dictionary with all metadata
+#         result = {
+#             'label': final_prediction,
+#             'raw_prediction': pred,
+#             'prediction_history': self.prediction_history.copy(),
+#             'confidence': 0.0,
+#             'probabilities': {}
+#         }
+        
+#         # Add probabilities if available
+#         if hasattr(self, 'latest_probabilities') and self.latest_probabilities is not None:
+#             classes = [str(i) for i in range(len(self.latest_probabilities))]
+#             result['probabilities'] = {c: p for c, p in zip(classes, self.latest_probabilities)}
+#             result['confidence'] = max(self.latest_probabilities)
+        
+#         return result
 
 class IntensityProcessor:
     """
