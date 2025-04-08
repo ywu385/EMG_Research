@@ -17,36 +17,56 @@ from post_processing import *
 from target_game import TargetGame
 from gamemanager2 import GameManager
 from spriralgame import GridSpiralChallenge
+
+#%%
+# Importing Args
+import argparse
+
+def parse_arguments():
+    """Parse command line arguments for model selection and intensity scaling"""
+    parser = argparse.ArgumentParser(description='EMG Processing with model selection')
+    
+    # Add model selection group
+    model_group = parser.add_mutually_exclusive_group()
+    model_group.add_argument('--model1', action='store_true', 
+                        help='Use the first model (LGBM.pkl)')
+    model_group.add_argument('--model2', action='store_true', 
+                        help='Use the second model (lgb.pkl)')
+    model_group.add_argument('--model3', action='store_true', 
+                        help='Use the third model (lgb.pkl)')
+    
+    # Add intensity scaling
+    parser.add_argument('--scale', type=float, default=1.0,
+                        help='Scaling factor for movement intensity (default: 1.0)')
+    
+    # Add optional max intensity cap
+    parser.add_argument('--max-intensity', type=float, default=3.0,
+                        help='Maximum intensity value (default: 3.0)')
+    
+    return parser.parse_args()
+
+# grabbing arguments
+args = parse_arguments()
+
+########################################################  Adding speed scaling ######################################################################
+
+manual_intensity_scale = args.scale
+max_allowed_intensity = args.max_intensity
+print(f"Using intensity scaling factor: {manual_intensity_scale}")
+print(f"Maximum intensity capped at: {max_allowed_intensity}")
 #%%
 # BITA = True
 # Flag for model switching
-model_flag = '--model1'  # Default to model1
-if len(sys.argv) > 1:
-    if '--model1' in sys.argv:
-        model_flag = 'model1'
-    elif '--model2' in sys.argv:
-        model_flag = 'model2'
-    elif '--model3' in sys.argv:
-        model_flag = 'model3'
-else:
-    model_flag = 'model2'
-    
-
-print(f'Loading models and processors associated with {model_flag}')
-
-######################################################## Loading Models based on flag ######################################################################
-
-if model_flag == 'model1':
+if args.model1: 
     model_path = './working_models/LGBM_simple.pkl'
     print('Base Model loaded as {model_path}')
-elif model_flag == 'model2':
+elif args.model2:
     model_path = './working_models/LGBM.pkl'
-    print('Experimental Model Loaded {model_path}')  
-elif model_flag == 'model3':
-    model_path ='./workding_models/LGBM_model3.pkl'
-    print('Experimental (zona) Model Loaded {model_path}') 
+    print('Experimental Model Loaded {model_path}') 
+elif args.model3:
+    model_path ='./working_models/LGBM_model3.pkl'
+    print('Experimental (zona) Model Loaded {model_path}')  
 
-######################################################## End of Model flag loading ######################################################################
 # Import your custom EMG modules
 try:    
     from revolution_api.bitalino import *
@@ -81,6 +101,7 @@ else:
 #%%
 # BITalino MAC address
 mac_address = "/dev/tty.BITalino-3C-C2"  # Update with your device's address
+
 
 # Initialize device and streamer
 if EMG_MODULES_AVAILABLE:
@@ -126,7 +147,7 @@ if EMG_MODULES_AVAILABLE:
         print("Pipeline added to streamer at global level")
         
         # Setup model processor
-        if model_flag == 'model2' or model_flag == 'model3':
+        if args.model2 or args.model3:
             model_processor = LGBMProcessor(
                 models=models,
                 window_size=250,
@@ -136,7 +157,7 @@ if EMG_MODULES_AVAILABLE:
                 wavelets  = ['sym5']
                 # label_encoder=label_encoder
             )
-        elif model_flag == 'model1':
+        elif args.model1:
             model_processor = LGBMProcessor(
                 models=models,
                 window_size=250,
@@ -203,6 +224,9 @@ def process_emg_data(model_processor, chunk_queue):
                         # norm_rms = np.array(i_metrics['rms_values']).max() / i_metrics['max_rms_ever']
                         norm_rms = i_metrics['overall_normalized_rms']
                         intensity_value = min_speed + (norm_rms * (max_speed - min_speed))
+                        intensity_value = intensity_value * manual_intensity_scale
+
+                        intensity_value = min(intensity_value, max_allowed_intensity)
         ########################################################  New Intensity limit ######################################################################
                     # if i_metrics[metric_att] is not None and len(i_metrics[metric_att]) > 0:
                     #     min_speed, max_speed = 0, 3  # Define min/max speed range
@@ -311,8 +335,8 @@ def main():
     # Mapping of EMG predictions to game directions
     # Customize based on your model's output classes
     prediction_mapping = {
-        'upward': 'down',
-        'downward': 'up',
+        'upward': 'up',
+        'downward': 'down',
         'inward': 'left',
         'outward': 'right',
         'rest':'rest',

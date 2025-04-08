@@ -61,7 +61,7 @@ def main():
         models.append(clf)
     
     # Save models
-    with open('./working_models/LGBM.pkl', 'wb') as f:
+    with open('./working_models/LGBM_model3.pkl', 'wb') as f:
         pickle.dump(models, f)
     
     print(f"Model saved to ./working_models/LGBM_model3.pkl")
