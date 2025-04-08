@@ -65,7 +65,10 @@ elif args.model2:
     print('Experimental Model Loaded {model_path}') 
 elif args.model3:
     model_path ='./working_models/LGBM_model3.pkl'
-    print('Experimental (zona) Model Loaded {model_path}')  
+    print('Experimental (zona) Model Loaded {model_path}') 
+else:
+    model_path = './working_models/LGBM_model3.pkl'
+    print(f'No model selected.  Defaulting to {model_path}') 
 
 # Import your custom EMG modules
 try:    
