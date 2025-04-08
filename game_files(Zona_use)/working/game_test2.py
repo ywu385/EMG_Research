@@ -344,8 +344,8 @@ def main():
         'Downward':'down',
         'Left':'right',
         'Right':'left',
-        'upward': 'down',
-        'downward': 'up',
+        # 'upward': 'down',
+        # 'downward': 'up',
         # 'left':'right',
         # 'right':'left'
         # Add mappings for your specific model outputs

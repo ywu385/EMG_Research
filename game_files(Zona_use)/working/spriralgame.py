@@ -96,11 +96,12 @@ class GridSpiralChallenge:
             
             with open(filename, 'w') as f:
                 # Write header information
-                f.write(f"Sprial Game Path History\n")
+                f.write(f"Spiral Game Path History\n")
                 f.write(f"User ID: {user_id}\n")
                 f.write(f"Session Time ID: {time_id}\n")
-                f.write(f"Targets Completed: {self.targets_completed}\n")
-                f.write(f"Total Time: {self.current_run_time:.2f} seconds\n")
+                f.write(f"Progress: {self.progress:.2f}%\n")
+                f.write(f"Points Reached: {self.current_point_index}/{len(self.spiral_points)}\n")
+                f.write(f"Total Time: {self.total_time:.2f} seconds\n")
                 f.write(f"Path (Grid Numbers):\n")
                 
                 # Write the actual path history

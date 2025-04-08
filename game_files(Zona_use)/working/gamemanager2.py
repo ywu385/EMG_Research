@@ -86,6 +86,11 @@ class GameManager:
     def switch_game(self, game_type):
         """Switch to a different game type"""
         if game_type != self.current_game_type:
+
+            if self.current_game_type == self.GAME_TARGET:
+                self.target_game.save_path_history_to_file(time_id=self.time_id)
+            elif self.current_game_type == self.GAME_SPIRAL:
+                self.spiral_game.save_path_history_to_file(time_id=self.time_id)
             self.current_game_type = game_type
             
             # Reset camera position for new game
@@ -113,10 +118,10 @@ class GameManager:
             
             # Switch to next game type
             if self.current_game_type == self.GAME_TARGET:
-                self.target_game.save_path_history_to_file(time_id = self.time_id) 
+                # self.target_game.save_path_history_to_file(time_id = self.time_id) 
                 self.switch_game(self.GAME_SPIRAL)
             else:  # self.current_game_type == self.GAME_SPIRAL
-                self.spiral_game.save_path_history_to_file(time_id=self.time_id)
+                # self.spiral_game.save_path_history_to_file(time_id=self.time_id)
                 self.switch_game(self.GAME_TARGET)
                 
                 
@@ -130,7 +135,7 @@ class GameManager:
                 if self.target_game.state == self.target_game.STATE_WAITING:
                     self.target_game.start_countdown()
                 elif self.target_game.state in [self.target_game.STATE_LEVEL_COMPLETE, self.target_game.STATE_TIME_EXPIRED]:
-                    self.target_game.save_path_history_to_file(time_id = self.time_id)  # save game log
+                    # self.target_game.save_path_history_to_file(time_id = self.time_id)  # save game log
                     # When level is complete, switch to spiral game
                     if self.target_game.state == self.target_game.STATE_LEVEL_COMPLETE:                        
                         self.switch_game(self.GAME_SPIRAL)
@@ -142,7 +147,7 @@ class GameManager:
                 if self.spiral_game.state == self.spiral_game.STATE_WAITING:
                     self.spiral_game.start_countdown()
                 elif self.spiral_game.state == self.spiral_game.STATE_COMPLETED:
-                    self.spiral_game.save_path_history_to_file(time_id=self.time_id)
+                    # self.spiral_game.save_path_history_to_file(time_id=self.time_id)
                     # When spiral is complete, switch back to target game
                     self.switch_game(self.GAME_TARGET)
                     self.target_game.reset_game()
