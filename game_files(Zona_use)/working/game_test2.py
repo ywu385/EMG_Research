@@ -26,18 +26,27 @@ if len(sys.argv) > 1:
         model_flag = 'model1'
     elif '--model2' in sys.argv:
         model_flag = 'model2'
+    elif '--model3' in sys.argv:
+        model_flag = 'model3'
+else:
+    model_flag = 'model2'
     
 
 print(f'Loading models and processors associated with {model_flag}')
 
+######################################################## Loading Models based on flag ######################################################################
+
 if model_flag == 'model1':
     model_path = './working_models/LGBM_simple.pkl'
     print('Base Model loaded as {model_path}')
-else:
+elif model_flag == 'model2':
     model_path = './working_models/LGBM.pkl'
     print('Experimental Model Loaded {model_path}')  
+elif model_flag == 'model3':
+    model_path ='./workding_models/LGBM_model3.pkl'
+    print('Experimental (zona) Model Loaded {model_path}') 
 
-
+######################################################## End of Model flag loading ######################################################################
 # Import your custom EMG modules
 try:    
     from revolution_api.bitalino import *
@@ -55,11 +64,11 @@ emg_queue = multiprocessing.Queue(maxsize=5)
 print("Initializing EMG components at global level...")
 #%%
 # Find the model path
-model_paths = glob.glob('./working_models/LGBM.pkl')
+# model_paths = glob.glob('./working_models/LGBM.pkl')
 # model_paths = glob.glob('./working_models/lgb.pkl')
-if model_paths:
-    model_path = model_paths[0]
-    print(f"Found model: {model_path}")
+if model_path:
+    # model_path = model_path[0]
+    # print(f"Found model: {model_path}")
     
     # Load model
     with open(model_path, 'rb') as file:
@@ -117,7 +126,7 @@ if EMG_MODULES_AVAILABLE:
         print("Pipeline added to streamer at global level")
         
         # Setup model processor
-        if model_flag == 'model2':
+        if model_flag == 'model2' or model_flag == 'model3':
             model_processor = LGBMProcessor(
                 models=models,
                 window_size=250,
@@ -127,7 +136,7 @@ if EMG_MODULES_AVAILABLE:
                 wavelets  = ['sym5']
                 # label_encoder=label_encoder
             )
-        else:
+        elif model_flag == 'model1':
             model_processor = LGBMProcessor(
                 models=models,
                 window_size=250,
@@ -311,8 +320,8 @@ def main():
         'Downward':'down',
         'Left':'right',
         'Right':'left',
-        'left':'right',
-        'right':'left'
+        # 'left':'right',
+        # 'right':'left'
         # Add mappings for your specific model outputs
     }
     

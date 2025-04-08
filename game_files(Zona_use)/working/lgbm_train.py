@@ -47,8 +47,8 @@ def main():
         clf = LGBMClassifier(
             n_estimators=100,
             learning_rate=0.1,
-            max_depth=10,
-            num_leaves=31,
+            max_depth=15,
+            num_leaves=20,
             min_child_samples=10,
             random_state=42,
             n_jobs=-1,
@@ -64,7 +64,7 @@ def main():
     with open('./working_models/LGBM.pkl', 'wb') as f:
         pickle.dump(models, f)
     
-    print(f"Model saved to ./working_models/LGBM.pkl")
+    print(f"Model saved to ./working_models/LGBM_model3.pkl")
     
     # Create a small test to verify the saved model works
     test_sample = X.iloc[:5]
