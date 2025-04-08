@@ -177,6 +177,10 @@ class GameManager:
         # ESC to exit
         if keys[pygame.K_ESCAPE] and not self.esc_pressed:
             # Quit the game
+            if self.current_game_type == self.GAME_TARGET:
+                self.target_game.save_path_history_to_file(time_id = self.time_id) 
+            elif self.current_game_type == self.GAME_SPIRAL:
+                self.spiral_game.save_path_history_to_file(time_id=self.time_id)
             self.cleanup()
             sys.exit()
             self.esc_pressed = True
