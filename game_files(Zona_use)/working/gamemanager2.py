@@ -171,8 +171,10 @@ class GameManager:
         # R to reset
         if keys[pygame.K_r] and not self.r_pressed:
             if self.current_game_type == self.GAME_TARGET:
+                self.target_game.save_path_history_to_file(self.time_id)
                 self.target_game.reset_game()
             elif self.current_game_type == self.GAME_SPIRAL:
+                self.spiral_game.save_path_history_to_file(self.time_id)
                 self.spiral_game.reset()
             self.r_pressed = True
             print("Game reset by user")

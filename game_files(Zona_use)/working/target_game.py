@@ -88,8 +88,15 @@ class TargetGame:
             os.makedirs(user_dir, exist_ok=True)
             
             # Create filename
-            filename = os.path.join(user_dir, f"{time_id}_target_game_path.txt")
+            base_filename = os.path.join(user_dir, f"{time_id}_target_game_path.txt")
             
+            filename = base_filename
+            counter = 1
+            while os.path.exists(filename):
+                # File exists, create a new name with a counter
+                filename = os.path.join(user_dir, f"{time_id}_target_game_path_{counter}.txt")
+                counter += 1
+
             with open(filename, 'w') as f:
                 # Write header information
                 f.write(f"Target Game Path History\n")
