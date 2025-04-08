@@ -193,3 +193,10 @@ video_viz*
 **/model_test/**
 
 **/old_stuff/**
+**/not_used_modules/**
+**/emg_recordings/**
+**/working_models/**
+**/game_data/**
+**/recorded_data/**
+**/data/**
+**/training_data/**
