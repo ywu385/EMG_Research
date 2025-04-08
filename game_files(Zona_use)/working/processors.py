@@ -87,6 +87,24 @@ class NotchFilter(SignalProcessor):
         for b, a in zip(self.b_filters, self.a_filters):
             filtered = signal.filtfilt(b, a, filtered, axis=1)
         return filtered
+    
+class AdaptiveMaxNormalizer(SignalProcessor):
+    def __init__(self, decay_factor=0.999):
+        self.max_values = None
+        self.decay_factor = decay_factor  # For gradually reducing max over time
+    
+    def process(self, window):
+        if self.max_values is None:
+            self.max_values = np.max(np.abs(window), axis=0)
+        else:
+            # Decay previous max slightly to allow adaptation over time
+            self.max_values = self.max_values * self.decay_factor
+            # Update max values where new signals exceed them
+            current_max = np.max(np.abs(window), axis=0)
+            self.max_values = np.maximum(self.max_values, current_max)
+        
+        # Normalize by max values (add small epsilon to avoid division by zero)
+        return window / (self.max_values + 1e-8)
 
 class RealTimeButterFilter(SignalProcessor):
     def __init__(self, cutoff, sampling_rate, filter_type='bandpass', order=4):

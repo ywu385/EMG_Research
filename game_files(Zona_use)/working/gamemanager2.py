@@ -34,6 +34,9 @@ class GameManager:
         # Game state management
         self.current_game_type = self.GAME_TARGET
         
+        # time_id for managing save data
+        self.time_id = self.get_current_timestamp()
+
         # Create game instances
         self.target_game = TargetGame(self.grid_size, targets_for_next_level=10, time_limit=300)
         self.spiral_game = GridSpiralChallenge(self.grid_size)
@@ -71,6 +74,7 @@ class GameManager:
         self.p_pressed = False
         self.esc_pressed = False
         self.r_pressed = False
+
         
         # Register cleanup function
         atexit.register(self.cleanup)
@@ -90,8 +94,16 @@ class GameManager:
             
             print(f"Switched to game type: {game_type}")
     
+    def get_current_timestamp(self):
+        """Returns a consistent timestamp string for file naming"""
+        from datetime import datetime
+        time_id =  datetime.now().strftime("%Y%m%d_%H%M%S")
+        return time_id[-5:]
+
     def handle_input(self):
         """Process keyboard and EMG input"""
+        # creat time_id for save files
+        
         # Get keyboard state
         keys = pygame.key.get_pressed()
 
@@ -101,9 +113,12 @@ class GameManager:
             
             # Switch to next game type
             if self.current_game_type == self.GAME_TARGET:
+                self.target_game.save_path_history_to_file(time_id = self.time_id) 
                 self.switch_game(self.GAME_SPIRAL)
             else:  # self.current_game_type == self.GAME_SPIRAL
+                self.spiral_game.save_path_history_to_file(time_id=self.time_id)
                 self.switch_game(self.GAME_TARGET)
+                
                 
             print("Game switched using N key")
         elif not keys[pygame.K_n] and hasattr(self, 'n_pressed'):
@@ -115,8 +130,9 @@ class GameManager:
                 if self.target_game.state == self.target_game.STATE_WAITING:
                     self.target_game.start_countdown()
                 elif self.target_game.state in [self.target_game.STATE_LEVEL_COMPLETE, self.target_game.STATE_TIME_EXPIRED]:
+                    self.target_game.save_path_history_to_file(time_id = self.time_id)  # save game log
                     # When level is complete, switch to spiral game
-                    if self.target_game.state == self.target_game.STATE_LEVEL_COMPLETE:
+                    if self.target_game.state == self.target_game.STATE_LEVEL_COMPLETE:                        
                         self.switch_game(self.GAME_SPIRAL)
                         self.spiral_game.reset()
                     else:
@@ -126,6 +142,7 @@ class GameManager:
                 if self.spiral_game.state == self.spiral_game.STATE_WAITING:
                     self.spiral_game.start_countdown()
                 elif self.spiral_game.state == self.spiral_game.STATE_COMPLETED:
+                    self.spiral_game.save_path_history_to_file(time_id=self.time_id)
                     # When spiral is complete, switch back to target game
                     self.switch_game(self.GAME_TARGET)
                     self.target_game.reset_game()

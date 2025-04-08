@@ -2,6 +2,8 @@ import pygame
 import numpy as np
 import time
 import math
+from datetime import datetime
+import os
 
 class GridSpiralChallenge:
     """
@@ -48,17 +50,81 @@ class GridSpiralChallenge:
         self.CYAN = (0, 255, 255)
         self.PURPLE = (128, 0, 128)
         self.ORANGE = (255, 165, 0)
+
+        self.complete_path_history = []  
+        self.current_path_segment = []   # Tracks current path segment
+        self.last_position_number = None  
         
-    def generate_spiral_path(self):
+
+    def coords_to_grid_number(self, col, row):
+        """Convert grid coordinates to a grid number (1-100)"""
+        return row * self.grid_size + col + 1
+    
+
+    def update_path(self, current_position):
+        """Update path tracking with player's current position"""
+        if self.state != self.STATE_PLAYING:
+            return
+            
+        # Convert position coordinates to grid number
+        col, row = current_position
+        position_number = self.coords_to_grid_number(col, row)
+        
+        # Avoid adding duplicate consecutive positions
+        if position_number != self.last_position_number:
+            self.complete_path_history.append(position_number)
+            self.current_path_segment.append(position_number)
+            self.last_position_number = position_number
+
+    
+
+    def save_path_history_to_file(self, user_id="user", base_dir="game_data", time_id = None):
+        """Save the complete path history to a file with timestamp and user ID"""
+        try:
+            # Create directory structure
+            if time_id is None:
+                time_id = datetime.now().strftime("%Y%m%d_%H%M%S")[-5:]
+
+            user_id = user_id + '_' + time_id
+            user_dir = os.path.join(base_dir, user_id)
+
+            # Create directories if they don't exist
+            os.makedirs(user_dir, exist_ok=True)
+            
+            # Create filename
+            filename = os.path.join(user_dir, f"{time_id}_sprial_game_path.txt")
+            
+            with open(filename, 'w') as f:
+                # Write header information
+                f.write(f"Sprial Game Path History\n")
+                f.write(f"User ID: {user_id}\n")
+                f.write(f"Session Time ID: {time_id}\n")
+                f.write(f"Targets Completed: {self.targets_completed}\n")
+                f.write(f"Total Time: {self.current_run_time:.2f} seconds\n")
+                f.write(f"Path (Grid Numbers):\n")
+                
+                # Write the actual path history
+                for i, position in enumerate(self.complete_path_history):
+                    f.write(f"{i+1}: {position}\n")
+                    
+            print(f"Path history saved to {filename}")
+            return filename
+        except Exception as e:
+            print(f"Error saving path history: {e}")
+            return None
+
+    def generate_spiral_path(self, start_grid_number = 35):
         """Generate a spiral path of grid coordinates"""
         self.spiral_points = []
         
         # Start at the center of the grid
-        center_x = self.grid_size // 2
-        center_y = self.grid_size // 2
+        # center_x = self.grid_size // 2
+        # center_y = self.grid_size // 2
+        start_col = (start_grid_number - 1) % self.grid_size
+        start_row = (start_grid_number - 1) // self.grid_size
         
         # Initialize spiral path with the center point
-        self.spiral_points.append((center_x, center_y))
+        self.spiral_points.append((start_col, start_row))
         
         # Define directions: right, down, left, up
         directions = [(1, 0), (0, 1), (-1, 0), (0, -1)]
@@ -66,7 +132,7 @@ class GridSpiralChallenge:
         # Generate spiral path
         steps = 1  # Number of steps in current direction
         direction_index = 0  # Start moving right
-        x, y = center_x, center_y
+        x, y = start_col, start_row
         
         # Continue until we reach grid boundaries
         max_steps = self.grid_size * 2
@@ -137,6 +203,8 @@ class GridSpiralChallenge:
         if self.state != self.STATE_PLAYING:
             return False
         
+        self.update_path(current_position)
+
         if self.current_point_index >= len(self.spiral_points):
             return False
             
@@ -194,6 +262,9 @@ class GridSpiralChallenge:
         self.state = self.STATE_WAITING
         self.current_point_index = 0
         self.progress = 0
+        self.complete_path_history = []
+        self.current_path_segment = []
+        self.last_position_number = None
     
     def get_info(self):
         """Get current challenge information"""
