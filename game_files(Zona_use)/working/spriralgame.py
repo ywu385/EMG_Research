@@ -101,6 +101,11 @@ class GridSpiralChallenge:
                 filename = os.path.join(user_dir, f"{time_id}_sprial_game_path_{counter}.txt")
                 counter += 1
 
+            if self.state == self.STATE_PLAYING:
+                current_time = time.time() - self.start_time
+            else:
+                current_time = self.total_time
+
             with open(filename, 'w') as f:
                 # Write header information
                 f.write(f"Spiral Game Path History\n")
@@ -108,7 +113,7 @@ class GridSpiralChallenge:
                 f.write(f"Session Time ID: {time_id}\n")
                 f.write(f"Progress: {self.progress:.2f}%\n")
                 f.write(f"Points Reached: {self.current_point_index}/{len(self.spiral_points)}\n")
-                f.write(f"Total Time: {self.total_time:.2f} seconds\n")
+                f.write(f"Total Time: {current_time:.2f} seconds\n")
                 f.write(f"Path (Grid Numbers):\n")
                 
                 # Write the actual path history
@@ -276,6 +281,7 @@ class GridSpiralChallenge:
     
     def get_info(self):
         """Get current challenge information"""
+        
         return {
             'state': self.state,
             'progress': self.progress,
